@@ -1,219 +1,131 @@
 <template>
   <div id="toolbar">
-    <el-image class="imgProfile"
-              :src="user.userProfile"
-              :preview-src-list="[user.userProfile]"
-              :alt="user.nickname">
-      <div slot="error" class="image-slot">
-        <i class="el-icon-picture-outline"></i>
-      </div>
-    </el-image>
-    <div id="btnBar">
-      <div class="topBtnBar">
-        <el-tooltip  class="item" effect="dark" content="进入群聊" placement="right">
-        <el-button @click="chooseChatList('群聊')" class="toolBtn" size="small"><i class="fa fa-comments fa-2x" aria-hidden="true"></i></el-button>
-        </el-tooltip>
-        <el-tooltip class="item" effect="dark" content="用户列表" placement="right">
-        <el-button @click="chooseChatList('私聊')" class="toolBtn" size="small"><i class="fa fa-address-book-o fa-2x" aria-hidden="true"></i></el-button>
-        </el-tooltip>
-        <el-tooltip class="item" effect="dark" content="与机器人聊天" placement="right">
-          <el-button @click="chooseChatList('机器人')" class="toolBtn" size="small"><i class="fa fa-android fa-2x" aria-hidden="true"></i></el-button>
-        </el-tooltip>
-      </div>
-      <div class="bottomBtnBar">
-        <el-tooltip class="item" effect="dark" content="个人中心" placement="right">
-          <el-button class="toolBtn" size="small"><i class="fa fa-user fa-2x" aria-hidden="true"></i></el-button>
-        </el-tooltip>
-        <el-tooltip class="item" effect="dark" content="更多" placement="right">
-          <el-popover
-                  placement="right"
-                  width="180"
-                  trigger="click"
-                  popper-class="moreListPopoverClass"
-                   >
-            <ul id="moreList">
-              <li @click="showFeedbackDialog" >意见反馈</li>
-              <li>举报</li>
-              <li @click="clearChatHistory">清空聊天记录</li>
-            </ul>
-            <el-button slot="reference" class="toolBtn" size="small"><i class="fa fa-bars fa-2x" aria-hidden="true"></i></el-button>
-          </el-popover>
-        </el-tooltip>
-        <el-tooltip class="item" effect="dark" content="退出" placement="right">
-        <el-button @click="exitSystem" class="toolBtn" size="small"><i class="fa fa-sign-out fa-2x" aria-hidden="true"></i></el-button>
-        </el-tooltip>
-      </div>
+    <!-- 用户头像 -->
+    <div class="img-container">
+      <img class="img" :src="user.userProfile" :title="user.nickname" />
     </div>
-    <el-dialog title="意见反馈" :visible.sync="feedBackDialogVisible" class="feedbackDialog">
-      <textarea class="feedbackInput" v-model="feedBackContent">
 
-      </textarea>
-      <span slot="footer" class="dialog-footer">
-        <el-button type="primary" @click="handleFeedbackSend">确 定</el-button>
-        <el-button @click="feedBackDialogVisible = false">取 消</el-button>
-      </span>
-    </el-dialog>
+    <!-- 中间图标组 -->
+    <div class="icons-wrapper">
+      <i class="el-icon-chat-dot-round icon active" title="消息"></i>
+      <i class="el-icon-s-custom icon" title="联系人"></i>
+      <i class="el-icon-setting icon" title="设置"></i>
+    </div>
+
+    <!-- 底部占位符 -->
+    <div class="spacer"></div>
+
+    <!-- 底部退出按钮 -->
+    <i class="el-icon-switch-button icon logout" title="退出登录" @click="logout"></i>
   </div>
 </template>
 
 <script>
-  export default {
-    name: "toolbar",
-    data(){
-      return{
-        user:JSON.parse(window.sessionStorage.getItem('user')),
-        feedBackDialogVisible:false,
-        feedBackContent:'',
-      }
-    },
-    methods:{
-      //退出系统
-      exitSystem(){
-        this.$confirm('你是否要退出系统吗?', '系统提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }).then(() => {
-          this.getRequest("/logout");
-          sessionStorage.removeItem("user");
-          //清除SessionStorage中保存的state
-          if (sessionStorage.getItem("state")){
-            sessionStorage.removeItem("state");
-          }
-          //关闭连接
-          this.$store.dispatch("disconnect");
-          this.$router.replace("/");
-        }).catch(() => {
-          this.$message({
-            type: 'info',
-            message: '已取消操作'
-          });
+export default {
+  name: "toolbar",
+  computed: {
+    user() {
+      // 添加防御性检查，防止 currentUser 为 null 时报错
+      return this.$store.state.currentUser || { userProfile: '', nickname: '未知用户' };
+    }
+  },
+  methods: {
+    logout() {
+      this.$confirm('确定要退出登录吗?', '提示', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        // 1. 断开 WebSocket 连接
+        this.$store.dispatch('disconnect');
+
+        // 2. 清除 SessionStorage
+        window.sessionStorage.removeItem("user");
+        window.sessionStorage.removeItem("admin");
+
+        window.localStorage.removeItem("user");
+        window.localStorage.removeItem("admin");
+
+        // 3. 跳转回登录页
+        this.$router.replace('/');
+
+        this.$message({
+          type: 'success',
+          message: '已退出登录!'
         });
-      },
-      //选择聊天列表
-      chooseChatList(listName){
-        this.$store.commit("changeCurrentList",listName);
-      },
-      //打开意见反馈对话框
-      showFeedbackDialog(){
-        this.feedBackContent='';
-        this.feedBackDialogVisible=true;
-      },
-      //处理反馈消息邮件发送
-      handleFeedbackSend(){
-        let msgObj={};
-        msgObj.userId=this.user.id;
-        msgObj.nickname=this.user.nickname;
-        msgObj.username=this.user.username;
-        msgObj.content=this.feedBackContent;
-        console.log(msgObj)
-        this.postRequest("/mail/feedback",msgObj).then(resp=>{
-          if (resp) {
-            this.feedBackDialogVisible = false;
-          }
-        })
-      },
-      //清空聊天记录
-      clearChatHistory(){
-        this.$confirm('此操作将永久删除本地聊天记录(群聊记录会在下次登录时恢复), 是否继续?', '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }).then(() => {
-          //清除本地的localStorage中的聊天记录
-          if (localStorage.getItem("chat-session")){
-            localStorage.removeItem("chat-session");
-          }
-          //清除Vuex中保存的记录
-          this.$store.state.sessionStorage={};
-          //清除SessionStorage中保存的state
-          if (sessionStorage.getItem("state")){
-            sessionStorage.removeItem("state");
-          }
-          this.$message({
-            type: 'success',
-            message: '删除成功'
-          });
-        }).catch(() => {
-          this.$message({
-            type: 'info',
-            message: '已取消删除'
-          });
-        });
-      }
+      }).catch(() => {
+        // 取消退出
+      });
     }
   }
+}
 </script>
 
-<style lang="scss" scoped>
-  #toolbar{
-    width: 100%;
-    height: 100%;
-    #btnBar{
-      width: 100%;
-      height: 82%;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-    .imgProfile{
-      width: 40px;
-      height: 40px;
-      horiz-align: center;
-      margin: 25px 10px;
-    }
-    .toolBtn{
-      background-color: #2e3238;
-      border: 0;
-      margin: 5px 5px;
-    }
-    .feedbackDialog{
-      width: 1000px;
-      height: 800px;
-      margin: 10px auto;
-      //background-color: #ECEAE8;
-    }
-    .feedbackInput{
-      width: 450px;
-      height: 200px;
-      resize: none;
-      padding: 0;
-      margin: 0;
-    }
-  }
+<style scoped>
+#toolbar {
+  width: 100%;
+  height: 100%;
+  background-color: #1e1e1e; /* 深色侧边栏背景 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0;
+  box-sizing: border-box;
+}
 
+.img-container {
+  margin-bottom: 30px;
+}
 
-  #moreList{
-    margin: 0px;
-    padding: 0px;
-    background-color: #2e3238;
-    li {
-      padding-top: 14px;
-      padding-bottom: 14px;
-      padding-left: 5px;
-      //padding-right: 40px;
-      //border-bottom: 1px solid #292C33;
-      list-style: none;
-      cursor: pointer;
-      &:hover {
-        background-color: #abaaaa;
-      }
-    }
-  }
+.img {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px; /* 圆角矩形头像 */
+  transition: transform 0.2s;
+}
 
-</style>
-<style lang="scss">
-  /* el-popover是和app同级的，所以scoped的局部属性设置了无效 */
-  /* 需要设置全局style */
-  .el-popover.moreListPopoverClass{
-    height:150px;
-    width:150px;
-   // margin: 0px;
-    margin-left: 10px;
-    padding: 0px;
-    overflow-x: hidden;
-    overflow-y: hidden;
-    background-color:#2e3238;
-    border:none;
-  }
+.img:hover {
+  transform: scale(1.1);
+}
+
+.icons-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.icon {
+  font-size: 24px;
+  color: #9ca3af;
+  margin-bottom: 24px;
+  cursor: pointer;
+  padding: 10px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.icon:hover {
+  color: #ffffff;
+  background-color: rgba(255,255,255,0.1);
+}
+
+.icon.active {
+  color: #4f46e5; /* 激活色 */
+  background-color: rgba(79, 70, 229, 0.1);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.logout {
+  color: #ef4444; /* 红色退出按钮 */
+  margin-bottom: 10px;
+}
+
+.logout:hover {
+  color: #f87171;
+  background-color: rgba(239, 68, 68, 0.1);
+}
 </style>
