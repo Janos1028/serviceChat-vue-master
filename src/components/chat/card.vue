@@ -51,12 +51,17 @@ export default {
       }).then(() => {
         // 1. 断开 WebSocket 连接
         this.$store.dispatch('disconnect');
+        // 2. 重置 Vuex 中的内存数据
+        this.$store.commit('RESET_STATE');
 
-        // 2. 清除 SessionStorage 中的用户信息
+        // 3. 清除 sessionStorage 中的持久化缓存
+        window.sessionStorage.removeItem("state");
+
+        // 4. 清除 SessionStorage 中的用户信息
         window.sessionStorage.removeItem("user");
         window.localStorage.removeItem('user');
 
-        // 3. 跳转回登录页面
+        // 5. 跳转回登录页面
         this.$router.replace('/');
 
         // 提示消息

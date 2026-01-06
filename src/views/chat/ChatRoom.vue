@@ -1,7 +1,11 @@
 <template>
   <div class="chat-room-wrapper">
     <div class="room-layout">
-
+      <div
+          class="sidebar-mask"
+          v-show="isSidebarOpen"
+          @click="isSidebarOpen = false"
+      ></div>
       <div class="sidebar-container" :class="{ 'sidebar-closed': !isSidebarOpen }">
         <div class="sidebar-header">
           <div class="toggle-btn" @click="toggleSidebar" title="收起侧边栏">
@@ -223,6 +227,17 @@ export default {
 }
 
 @media screen and (max-width: 768px) {
+  .sidebar-mask {
+    display: block;
+    position: fixed;   /* 固定定位，铺满全屏 */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* 半透明黑色背景 */
+    z-index: 900;      /* 层级：在侧边栏(1000)之下，在主内容之上 */
+    transition: opacity 0.3s;
+  }
   .sidebar-container {
     position: absolute;
     left: 0;

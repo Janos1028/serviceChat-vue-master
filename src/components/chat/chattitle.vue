@@ -9,7 +9,10 @@
             alt=""
         >
         <div class="text-area">
-          <span class="name">{{currentSession.nickname}}</span>
+          <span class="name">
+            {{currentSession.nickname}}
+            <span v-if="currentSession.userTypeId === 1" class="support-chat-title-label">支撑人员</span>
+          </span>
           <div class="status-row">
             <span class="status-dot" :class="currentSession.userStateId === 1 ? 'online' : 'offline'"></span>
             <span>{{ currentSession.userStateId === 1 ? '在线' : '离线' }}</span>
@@ -17,7 +20,7 @@
         </div>
       </div>
 
-      <div class="action-area">
+<!--      <div class="action-area">
         <el-button
             v-if="!isPrivateChatActive && currentSession.username !== '群聊'"
             key="start-btn"
@@ -41,7 +44,7 @@
         >
           结束会话
         </el-button>
-      </div>
+      </div>-->
     </template>
 
     <div v-else class="title-placeholder">
@@ -104,6 +107,19 @@ export default {
   box-sizing: border-box;
   border-bottom: 1px solid #dcdfe6;
   background-color: #fff;
+}
+
+.support-chat-title-label {
+  font-size: 10px;       /* 强制改小字体 */
+  color: #909399;        /* 灰色 */
+  background-color: #f4f4f5;
+  border: 1px solid #e9e9eb;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 8px;
+  font-weight: normal;   /* 【关键】强制去掉加粗，否则会继承 .name 的加粗 */
+  vertical-align: middle;
+  line-height: normal;   /* 防止行高异常 */
 }
 
 .title-placeholder {

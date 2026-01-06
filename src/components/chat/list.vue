@@ -20,7 +20,10 @@
         </div>
 
         <div class="text-wrapper">
-          <p class="name">{{item.nickname}}</p>
+          <p class="name">
+            {{item.nickname}}
+            <span v-if="item.userTypeId === 1" class="support-chat-title-label">支撑人员</span>
+          </p>
           <span
               class="status-text"
               :class="{ 'online-text': item.userStateId === 1 }"
@@ -75,32 +78,11 @@ export default {
         list = [...this.users];
       }
 
-      // 2. 【核心修改】排序逻辑：仅按最新消息时间倒序
+      // 2. 排序逻辑：仅按最新消息时间倒序
       return list.sort((a, b) => {
-        // 获取当前用户信息，用于拼接 Key
-        const user = this.currentUser || JSON.parse(window.sessionStorage.getItem('user'));
-        if (!user) return 0;
+        const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
+        const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
 
-        const keyA = user.username + '#' + a.username;
-        const keyB = user.username + '#' + b.username;
-
-        let timeA = 0;
-        let timeB = 0;
-
-        // 获取 A 的最后一条消息时间
-        if (this.sessions[keyA] && this.sessions[keyA].length > 0) {
-          const lastMsg = this.sessions[keyA][this.sessions[keyA].length - 1];
-          timeA = new Date(lastMsg.date).getTime();
-        }
-
-        // 获取 B 的最后一条消息时间
-        if (this.sessions[keyB] && this.sessions[keyB].length > 0) {
-          const lastMsg = this.sessions[keyB][this.sessions[keyB].length - 1];
-          timeB = new Date(lastMsg.date).getTime();
-        }
-
-        // 仅按时间降序排列：时间越大（越新）越靠前
-        // 如果都没有消息 (0 - 0)，则保持原顺序
         return timeB - timeA;
       });
     }
@@ -241,9 +223,22 @@ li.active .name { color: #08429f; }
   animation: pulse 2s infinite;
 }
 
+.support-chat-title-label {
+  font-size: 10px;       /* 小字 */
+  color: #909399;        /* 灰色文字 */
+  background-color: #f4f4f5; /* 浅灰背景 */
+  border: 1px solid #e9e9eb; /* 浅边框 */
+  border-radius: 4px;    /* 圆角 */
+  padding: 1px 5px;      /* 内边距 */
+  margin-left: 6px;      /* 距离用户名的间距 */
+  font-weight: normal;   /* 不加粗 */
+  vertical-align: middle; /* 垂直居中对齐 */
+}
+
 @keyframes pulse {
   0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 108, 108, 0.7); }
   70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(245, 108, 108, 0); }
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(245, 108, 108, 0); }
 }
+
 </style>

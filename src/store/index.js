@@ -5,7 +5,8 @@ import {
   reqStartPrivateChat,
   reqClosePrivateChat,
   reqGetPrivateChatHistory,
-  reqGetAllActiveSessions
+  reqGetAllActiveSessions,
+  baseUrl
 } from "../utils/api";
 import SockJS from '../utils/sockjs'
 import '../utils/stomp'
@@ -34,6 +35,23 @@ const store = new Vuex.Store({
     initRoutes(state, data) {
       state.routes = data;
     },
+
+    // 当用户点击退出登录后，清除掉session中的state数据
+    RESET_STATE(state) {
+      state.routes = [];
+      state.sessions = {};
+      state.users = [];
+      state.currentUser = null;
+      state.currentSession = null;  // 关键：清除当前选中的人
+      state.isPrivateChatActive = false;
+      state.currentConversationId = null;
+      state.activeSessions = {};
+      state.isDot = {};
+      state.filterKey = '';
+      // 如果 stomp 连接还在，最好也置空（虽然 disconnect 已经断开了）
+      state.stomp = null;
+    },
+
     // 更新用户在线状态
     UPDATE_USER_STATE(state, { userId, userStateId }) {
       let user = state.users.find(u => u.id === userId);
@@ -169,7 +187,7 @@ const store = new Vuex.Store({
         let user = JSON.parse(userStr);
         token = user.token;
       }
-      context.state.stomp = Stomp.over(new SockJS('/ws/ep'));
+      context.state.stomp = Stomp.over(new SockJS(baseUrl +'/ws/ep'));
       let headers = { 'Authorization': 'Bearer ' + token };
 
       context.state.stomp.connect(headers, success => {
@@ -194,10 +212,18 @@ const store = new Vuex.Store({
           ) {
             // 过滤系统消息
             if (!receiveMsg.messageTypeId || receiveMsg.messageTypeId <= 3) {
+
+              // 直接调用 Notification，允许堆叠
               Notification.info({
                 title: '【' + receiveMsg.fromNickname + '】发来消息',
                 message: receiveMsg.content.length > 15 ? receiveMsg.content.substr(0, 15) + '...' : receiveMsg.content,
-                position: "bottom-right",
+
+                // 【关键设置】位置在右上角
+                position: "top-right",
+
+                // 3秒后自动消失，避免消息太多占满屏幕
+                duration: 3000,
+
                 customClass: 'chat-notification',
                 onClick: () => {
                   let senderUser = context.state.users.find(u => u.username === receiveMsg.from);

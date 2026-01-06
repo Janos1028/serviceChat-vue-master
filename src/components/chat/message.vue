@@ -1,5 +1,10 @@
 <template>
   <div id="message" v-scroll-bottom="sessions">
+
+    <div class="limit-tip" v-if="currentSession">
+      <i class="el-icon-info"></i> 系统仅显示最近五次会话的聊天记录
+    </div>
+
     <div v-if="currentSession && sessions">
       <div class="chat-wrapper">
         <div v-for="(entry, index) in sessions[user.username+'#'+currentSession.username]" :key="index" class="message-row">
@@ -179,4 +184,14 @@ export default {
 .message-group.self .download-link { color: #505050; border-top: 1px solid rgba(0,0,0,0.1); }
 .empty-state { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #909399; }
 .logo-box i { font-size: 60px; color: #e4e7ed; margin-bottom: 10px; }
+.limit-tip {
+  text-align: center;
+  padding: 10px 0;
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: #909399;     /* 灰色文字 */
+  background-color: #f3f3f3; /* 浅灰背景，如果想要透明背景可以去掉这一行 */
+  border-radius: 4px; /* 圆角，可选 */
+  width: 100%;
+}
 </style>

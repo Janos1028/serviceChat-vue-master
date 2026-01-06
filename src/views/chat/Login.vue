@@ -49,7 +49,12 @@
                 prefix-icon="el-icon-key"
                 class="verify-input"
             ></el-input>
-            <img :src="verifyCode" title="点击切换验证码" @click="changeverifyCode" class="verify-img" />
+            <img
+                :src="verifyCodeImgUrl"
+                title="点击切换验证码"
+                @click="getVerifyCode"
+                class="verify-img"
+            />
           </div>
         </el-form-item>
 
@@ -163,37 +168,55 @@
 </template>
 
 <script>
+import axios from 'axios';
 // 引入 publicAvatarUploadUrl
-import { reqUserLogin, reqUserRegister, reqCheckUsername, reqCheckNickname, publicAvatarUploadUrl } from '../../utils/api';
+import {
+  reqUserLogin,
+  reqUserRegister,
+  reqCheckUsername,
+  reqCheckNickname,
+  publicAvatarUploadUrl,
+  baseUrl
+} from '../../utils/api';
 
 export default {
   name: "Login",
   data(){
     var validateNickname = (rule, value, callback) => {
       if (value === '') {
-        callback(new Error('请输入昵称'));
+        return callback(new Error('请输入昵称'));
       }
-      reqCheckNickname(value).then(resp=>{
-        if (resp && resp.status == 200 && resp.obj){
-          callback(new Error("该昵称已被注册"))
-        } else {
+      reqCheckNickname(value).then(resp => {
+        // 只有明确返回 200 且 数量为0 时，才算通过
+        if (resp && resp.status == 200 && resp.obj == 0) {
           callback();
+        } else {
+          // 其他情况（包括 resp.obj > 0 或者 status != 200）都提示已被注册
+          // 这里的文字对应的是“昵称”框
+          callback(new Error("该昵称已被注册"));
         }
-      })
+      }).catch(e => {
+        // 网络完全不通时，保留网络错误的提示比较合理，或者你也想改成已注册？
+        // 通常这里保留“网络异常”更方便排查，如果想强行统一，也可以改成 callback(new Error("该昵称已被注册"));
+        callback(new Error("网络请求超时或异常"));
+      });
     };
+
     var validateUsername = (rule, value, callback) => {
       if (value === '') {
-        callback(new Error('请输入用户名'));
+        return callback(new Error('请输入用户名'));
       }
-      reqCheckUsername(value).then(resp=>{
-        if (resp && resp.status == 200 && resp.obj){
+      reqCheckUsername(value).then(resp => {
+        // 只有明确返回 200 且 数量为0 时，才算通过
+        if (resp && resp.status == 200 && resp.obj == 0) {
+          callback();
+        } else {
+          // 其他情况统统提示用户名已被注册
           callback(new Error('该用户名已被注册'));
         }
-        else {
-          callback();
-        }
-      })
-
+      }).catch(e => {
+        callback(new Error("网络请求超时或异常"));
+      });
     };
     var validatePass = (rule, value, callback) => {
       if (value === '') {
@@ -222,8 +245,9 @@ export default {
         username:'',
         password:'',
         code:'',
+        verifyKey: ''
       },
-      verifyCode:'/verifyCode',
+      verifyCodeImgUrl: '',
       checked:false,
       rules: {
         username:[{required:true,message:'请输入用户名',trigger:'blur'}],
@@ -260,6 +284,10 @@ export default {
       fileList:[],
     };
   },
+  mounted() {
+    // 页面加载时获取第一次验证码
+    this.getVerifyCode();
+  },
   methods:{
     getRandomAvatar() {
       const seed = Math.random().toString(36).substring(7);
@@ -268,20 +296,55 @@ export default {
     refreshRandomAvatar() {
       this.registerForm.userProfile = this.getRandomAvatar();
     },
+    getVerifyCode() {
+      // 【修改点】使用 axios.create() 创建一个新实例，绕过 api.js 中的全局拦截器
+      // 否则拦截器会把 headers 过滤掉，只返回 data
+      const newAxios = axios.create();
+
+      newAxios.get(baseUrl + '/verifyCode', {
+        responseType: 'blob', // 关键：告诉 axios 返回的是二进制文件
+        withCredentials: true // 保持跨域凭证设置
+      }).then(resp => {
+        // 现在 resp 是完整的响应对象，包含 status, headers, data 等
+
+        // 1. 从响应头中获取 Verify-Key
+        // 注意：axios 拿到的 headers key 默认是小写
+        const key = resp.headers['verify-key'];
+
+        if (key) {
+          this.loginForm.verifyKey = key;
+        } else {
+          console.warn("未获取到 Verify-Key，请检查后端是否配置了 Access-Control-Expose-Headers: Verify-Key");
+        }
+
+        // 2. 将二进制图片数据 (resp.data) 转换为浏览器可识别的 URL
+        if (this.verifyCodeImgUrl) {
+          window.URL.revokeObjectURL(this.verifyCodeImgUrl);
+        }
+        this.verifyCodeImgUrl = window.URL.createObjectURL(resp.data);
+      }).catch(err => {
+        this.$message.error('验证码获取失败');
+        console.error(err);
+      });
+    },
+    changeverifyCode() {
+      this.getVerifyCode();
+    },
 
     submitLogin() {
       this.$refs.loginForm.validate((valid) => {
         if (valid) {
           this.fullscreenLoading = true;
+
+          // reqUserLogin 发送时，loginForm 里已经包含了 verifyKey
+          // 所以这里不需要改动，verifyKey 会自动随表单发送
           reqUserLogin(this.loginForm).then(resp => {
             this.fullscreenLoading = false;
             if (resp && resp.status == 200 && resp.obj) {
+              // ... 登录成功的逻辑保持不变 ...
               this.$store.state.currentUser = resp.obj;
-
-              // 始终存入 sessionStorage
               window.sessionStorage.setItem("user", JSON.stringify(resp.obj));
 
-              // 根据勾选存入 localStorage
               if (this.checked) {
                 window.localStorage.setItem("user", JSON.stringify(resp.obj));
               } else {
@@ -291,18 +354,18 @@ export default {
               let path = this.$route.query.redirect;
               this.$router.replace((path == '/' || path == undefined) ? "/chatroom" : path);
             } else {
-              // 失败处理交给拦截器或保持原状
+              // 登录失败（如验证码错误），刷新验证码
+              this.getVerifyCode();
             }
           }).catch(() => {
             this.fullscreenLoading = false;
+            // 异常也刷新验证码
+            this.getVerifyCode();
           });
         } else {
-          // 校验失败
+          return false;
         }
       });
-    },
-    changeverifyCode(){
-      this.verifyCode="/verifyCode?time="+new Date();
     },
     gotoAdminLogin(){
       this.$router.replace("/adminlogin");
