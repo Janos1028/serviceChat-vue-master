@@ -452,13 +452,20 @@ export default {
 </script>
 
 <style lang="scss" scoped>
+/* 蓝色主题配色方案
+  - 背景：清新的天蓝渐变
+  - 主色：#409EFF (Element Blue)
+  - 深色强调：#044eba (Deep Blue，匹配 List 选中态)
+*/
+
 .login-page {
   height: 100vh;
   width: 100vw;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, #eef2ff 0%, #c7d2fe 100%);
+  /* 修改：改为清爽的蓝色渐变 */
+  background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
   position: relative;
   overflow: hidden;
 }
@@ -469,7 +476,8 @@ export default {
   right: -100px;
   width: 600px;
   height: 600px;
-  background: radial-gradient(circle, rgba(79, 70, 229, 0.1) 0%, rgba(255, 255, 255, 0) 70%);
+  /* 修改：改为蓝色光晕 */
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.2) 0%, rgba(255, 255, 255, 0) 70%);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -498,13 +506,10 @@ export default {
 .login-title {
   margin: 0;
   font-size: 28px;
-  color: #4f46e5;
+  /* 修改：使用深蓝色，更显专业 */
+  color: #044eba;
   font-weight: 700;
   letter-spacing: 1px;
-}
-
-.sub-title {
-  color: #4f46e5;
 }
 
 .login-subtitle {
@@ -523,10 +528,18 @@ export default {
   transition: all 0.3s;
 }
 
+/* 适配移动端字体大小 */
+@media screen and (max-width: 768px) {
+  ::v-deep .el-input__inner {
+    font-size: 16px !important;
+  }
+}
+
 ::v-deep .el-input__inner:focus {
-  border-color: #4f46e5;
+  /* 修改：聚焦颜色改为 Element Blue */
+  border-color: #409EFF;
   background-color: #fff;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.1);
 }
 
 ::v-deep .el-input__prefix {
@@ -566,12 +579,14 @@ export default {
   ::v-deep .el-checkbox {
     &.is-checked {
       .el-checkbox__input.is-checked .el-checkbox__inner {
-        background-color: #4f46e5;
-        border-color: #4f46e5;
+        /* 修改：选中框改为深蓝色 */
+        background-color: #044eba;
+        border-color: #044eba;
       }
 
       .el-checkbox__label {
-        color: #4f46e5 !important;
+        /* 修改：选中文字改为深蓝色 */
+        color: #044eba !important;
       }
     }
 
@@ -591,14 +606,15 @@ export default {
   width: 100%;
   height: 45px;
   font-size: 16px;
-  background: linear-gradient(90deg, #4f46e5 0%, #6366f1 100%);
+  /* 修改：按钮渐变改为深蓝到亮蓝 */
+  background: linear-gradient(90deg, #044eba 0%, #409EFF 100%);
   border: none;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
   transition: all 0.3s;
 }
 
 .submit-btn:hover {
-  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
+  box-shadow: 0 6px 16px rgba(64, 158, 255, 0.4);
   transform: translateY(-1px);
 }
 
@@ -608,7 +624,8 @@ export default {
 }
 
 .register-btn:hover {
-  color: #4f46e5;
+  /* 修改：注册按钮悬浮色 */
+  color: #409EFF;
 }
 
 .admin-link-btn {
@@ -624,7 +641,8 @@ export default {
 
 .admin-link-btn:hover {
   background: #fff;
-  color: #4f46e5;
+  /* 修改：图标悬浮色 */
+  color: #044eba;
 }
 
 .avatar-selection {
@@ -648,7 +666,8 @@ export default {
 }
 
 .avatar-preview-wrapper:hover {
-  border-color: #4f46e5;
+  /* 修改：头像框悬浮色 */
+  border-color: #409EFF;
 }
 
 .avatar-preview-img {
@@ -657,7 +676,6 @@ export default {
   object-fit: cover;
 }
 
-/* 刷新遮罩层 */
 .avatar-refresh-overlay {
   position: absolute;
   inset: 0;
@@ -679,7 +697,6 @@ export default {
   font-size: 24px;
 }
 
-/* 加载中遮罩层 */
 .avatar-loading-overlay {
   position: absolute;
   inset: 0;
@@ -691,7 +708,8 @@ export default {
 }
 
 .avatar-loading-overlay i {
-  color: #4f46e5;
+  /* 修改：加载图标色 */
+  color: #409EFF;
   font-size: 24px;
   animation: rotating 2s linear infinite;
 }
@@ -710,25 +728,17 @@ export default {
 
 .full-width-btn {
   width: 100%;
-  background: linear-gradient(90deg, #4f46e5 0%, #6366f1 100%);
+  /* 修改：弹窗按钮渐变 */
+  background: linear-gradient(90deg, #044eba 0%, #409EFF 100%);
   border: none;
 }
 
-.user-type-item {
+.user-type-item, .avatar-form-item {
   text-align: left !important;
   padding-left: 10px;
-
-  ::v-deep .el-form-item__label {
-    padding-left: 5px;
-  }
 }
 
-.avatar-form-item {
-  text-align: left !important;
-  padding-left: 10px;
-
-  ::v-deep .el-form-item__label {
-    padding-left: 5px;
-  }
+::v-deep .el-form-item__label {
+  padding-left: 5px;
 }
 </style>

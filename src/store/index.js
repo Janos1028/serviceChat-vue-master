@@ -58,6 +58,11 @@ const store = new Vuex.Store({
       if (user) {
         user.userStateId = userStateId;
       }
+      // 如果当前选中的人(currentSession)正好就是状态发生变化的人，也要更新它
+      if (state.currentSession && state.currentSession.id === userId) {
+        // 使用 Vue.set 保证视图立即响应更新
+        Vue.set(state.currentSession, 'userStateId', userStateId);
+      }
     },
     INIT_ACTIVE_SESSIONS(state, sessionsMap) {
       let newMap = {};
@@ -116,7 +121,13 @@ const store = new Vuex.Store({
         messageTypeId: msg.messageTypeId,
         self: !msg.notSelf
       })
+      let targetUser = state.users.find(u => u.username === msg.to);
+      if (targetUser) {
+        // 使用 Vue.set 确保新增属性是响应式的，能被组件监听到
+        Vue.set(targetUser, 'lastMessageTime', msg.createTime || new Date());
+      }
     },
+
     SET_HISTORY_MESSAGES(state, { username, messages }) {
       let key = state.currentUser.username + "#" + username;
       let formatted = messages.map(m => ({

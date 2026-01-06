@@ -102,7 +102,8 @@ export default {
 </script>
 
 <style>
-/* 【核心修改】全局样式重置 */
+
+/* 全局样式重置 */
 html, body {
   margin: 0;
   padding: 0;
@@ -157,5 +158,41 @@ html, body {
   transform: scale(1.02);
   transition: all 0.3s;
   opacity: 1;
+}
+
+@media screen and (max-width: 768px) {
+  /* 1. 修复 Message (顶部轻提示) */
+  .el-message {
+    /* 取消默认的最小宽度380px，改为屏幕的90% */
+    min-width: 0 !important;
+    width: 90% !important;
+    /* 增加顶部外边距，避开 Header 区域 (默认top约20px + margin 60px = 80px) */
+    margin-top: 40px !important;
+    /* 增加内边距，防止文字换行太紧凑 */
+    padding: 10px 15px !important;
+    /* 确保阴影和层级 */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    pointer-events: none !important;
+  }
+
+  /* 2. 修复 MessageBox (确认弹窗) */
+  .el-message-box {
+    /* 宽度调整为85%，适应手机屏幕 */
+    width: 85% !important;
+    /* 强制绝对定位居中，解决默认太靠上的问题 */
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    margin-top: 0 !important; /* 清除 Element UI 默认的 margin-top */
+  }
+
+  /* 3. 适配 Notification (如果有需要) */
+  .el-notification.chat-notification {
+    width: 90% !important;
+    right: 5% !important;
+    /* 如果觉得60px还是遮挡，可以在这里单独加高 */
+    top: 70px !important;
+  }
 }
 </style>
