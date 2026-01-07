@@ -53,7 +53,7 @@
     <div v-else class="empty-state">
       <div class="logo-box"><i class="el-icon-chat-dot-round"></i></div>
       <h2>你好, {{user.nickname}}</h2>
-      <p>选择左侧的好友开始聊天</p>
+      <p>选择左侧的联系人开始聊天</p>
     </div>
   </div>
 </template>

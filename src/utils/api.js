@@ -37,39 +37,45 @@ axios.interceptors.request.use(config => {
 
 // 响应拦截器 【核心修改部分】
 axios.interceptors.response.use(success => {
-    // 1. HTTP 状态码为 200，但业务逻辑可能报错
     if (success.status && success.status === 200) {
 
-        // 【修改点 1】: code -> status, message -> msg
+        // 【新增关键逻辑】判断是否需要“静音”（不弹窗）
+        // 如果是检查用户名或昵称的接口，则不进行全局 Message 提示
+        const requestUrl = success.config.url;
+        const isSilentRequest = requestUrl.includes('/checkUsername') || requestUrl.includes('/checkNickname');
+
         // --- 针对业务逻辑上的 Token 过期 (Status 401) ---
         if (success.data.status === 401) {
             Message.error({message: success.data.msg || '登录已过期，请重新登录'});
-            // 清除缓存
             window.sessionStorage.removeItem("user");
             window.sessionStorage.removeItem("admin");
             window.localStorage.removeItem("user");
             window.localStorage.removeItem("admin");
-            // 强制跳转
             router.replace('/');
             return;
         }
 
-        // 【修改点 2】: code -> status, message -> msg
         // 其他业务错误 (500, 403)
         if (success.data.status === 500 || success.data.status === 403) {
-            Message.error({message: success.data.msg || '操作失败'});
-            return;
+            // 只有非静音请求才弹窗
+            if (!isSilentRequest) {
+                Message.error({message: success.data.msg || '操作失败'});
+                return; // 拦截，不返回数据给组件（组件收到 undefined）
+            }
+            // 如果是静音请求（验证），我们不弹窗，但允许程序继续执行，
+            // 这样组件就能收到 success.data，从而在回调中判断 status != 200 并执行 callback(new Error)
         }
 
-        // 【修改点 3】: message -> msg
         // 操作成功
         if (success.data.msg) {
-            Message.success({message: success.data.msg});
+            // 只有非静音请求才弹窗 (防止 "用户名可用" 这种提示弹出)
+            if (!isSilentRequest) {
+                Message.success({message: success.data.msg});
+            }
         }
     }
     return success.data;
 }, error => {
-    // 2. HTTP 状态码错误处理 (Axios 捕获到的 HTTP 异常)
     if (error.response) {
         let status = error.response.status;
 
@@ -85,7 +91,6 @@ axios.interceptors.response.use(success => {
             window.localStorage.removeItem("admin");
             router.replace('/');
         } else {
-            // 【修改点 4】: 同时兼容 msg (RespBean) 和 message (Spring Boot 默认错误)
             if (error.response.data) {
                 const errorMsg = error.response.data.msg || error.response.data.message;
                 if (errorMsg) {

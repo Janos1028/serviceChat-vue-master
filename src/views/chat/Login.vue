@@ -397,12 +397,16 @@ export default {
       this.avatarLoading = false;
       this.uploadDisabled = false;
 
-      // 解析后端 RespBean
       if (response && response.status === 200) {
-        // 关键修复：从 obj 字段获取 URL
         this.registerForm.userProfile = response.obj;
-        this.$message.success("头像上传成功");
+
+        // 【修改点】优先使用后端返回的 msg，如果没有再显示默认文字
+        // 注意：这里必须手动调用 this.$message，因为 el-upload 不走全局拦截器
+        if (response.msg) {
+          this.$message.success(response.msg);
+        }
       } else {
+        // 同理，错误提示也优先用后端的
         this.$message.error(response.msg || "上传失败");
       }
     },
@@ -433,12 +437,12 @@ export default {
       this.$refs[formName].validate((valid) => {
         if (valid) {
           reqUserRegister(this.registerForm).then(resp=>{
+            // 【修改】移除了手动弹窗，完全依赖 api.js 的全局拦截器
             if (resp && resp.status == 200){
               this.registerDialogVisible=false;
-              this.$message.success("注册成功！请登录");
-            } else if (resp && resp.msg) {
-              this.$message.error(resp.msg);
+              // 这里的 "注册成功" 提示已由 api.js 自动弹出，无需重复
             }
+            // 错误提示同理，api.js 会拦截非 200 状态并提示，这里无需处理 else
           })
         } else {
           this.$message.error("请正确填写信息！");
@@ -740,5 +744,78 @@ export default {
 
 ::v-deep .el-form-item__label {
   padding-left: 5px;
+}
+</style>
+<style>
+/* 移动端深度适配：平衡舒适度与空间 */
+@media screen and (max-width: 768px) {
+  /* 1. 弹窗整体：仿照登录框的大小和质感 */
+  .custom-dialog {
+    width: 380px !important;     /* 尝试匹配登录框的标准宽度 */
+    max-width: 90% !important;   /* 手机屏幕较窄时，强制使用90%宽度 */
+    margin: 0 !important;        /* 清除默认 margin */
+
+    /* 强制居中定位 */
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+
+    /* 高度控制：留出一点上下边距，避免贴边 */
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+
+    /* 圆角与登录框保持一致 */
+    border-radius: 20px !important;
+  }
+
+  /* 2. 内容区：增加内边距，解决“太挤”的问题 */
+  .custom-dialog .el-dialog__body {
+    padding: 20px 25px !important; /* 恢复舒适的左右内边距 */
+    overflow-y: auto;              /* 内容变高了，万一超出屏幕允许滚动 */
+    -webkit-overflow-scrolling: touch; /* iOS 滚动优化 */
+  }
+
+  /* 3. 表单项：恢复适中的垂直间距 */
+  .custom-dialog .el-form-item {
+    margin-bottom: 18px !important; /* 比之前的12px宽松，比默认的22px紧凑 */
+  }
+
+  /* 4. 输入框：恢复高度，提升点击手感 */
+  .custom-dialog .el-input__inner {
+    height: 40px !important;      /* 40px 是移动端比较舒适的点击高度 */
+    line-height: 40px !important;
+  }
+  .custom-dialog .el-input__icon {
+    line-height: 40px !important;
+  }
+
+  /* 5. 头像区域：大小适中 */
+  .custom-dialog .avatar-preview-wrapper {
+    width: 60px !important;
+    height: 60px !important;
+  }
+  .custom-dialog .avatar-selection {
+    gap: 15px !important;
+  }
+
+  /* 6. 头部和底部：微调间距 */
+  .custom-dialog .el-dialog__header {
+    padding: 20px 20px 10px !important;
+  }
+  .custom-dialog .el-dialog__title {
+    font-size: 18px !important;   /* 标题字号恢复 */
+    font-weight: 600 !important;
+  }
+  .custom-dialog .el-dialog__footer {
+    padding: 10px 20px 25px !important;
+  }
+
+  /* 7. 注册按钮：加高一点，更像登录按钮 */
+  .custom-dialog .full-width-btn {
+    height: 40px !important;
+    font-size: 16px !important;
+  }
 }
 </style>
