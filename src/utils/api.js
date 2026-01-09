@@ -179,13 +179,17 @@ export const reqDeleteGroupMsgByIds = (params) => deleteRequest('/admin/GroupMsg
 
 // 6. 聊天相关
 export const reqGetChatUsers = () => getRequest('/user/chat/getUsersWithoutCurrentUser');
-
 // 注意：后端使用 @RequestParam，为了稳妥，我们这里直接拼接到URL上，或者使用 params 对象
 export const reqStartPrivateChat = (toId) => postRequest(`/user/private/start?toId=${toId}`);
 export const reqClosePrivateChat = (conversationId) => postRequest(`/user/private/close?conversationId=${conversationId}`);
 export const reqGetPrivateChatHistory = (toId) => getRequest('/user/private/history', {toId});
 export const reqGetPrivateChatStatus = (toId) => getRequest('/user/private/status', {toId});
 export const reqGetAllActiveSessions = () => getRequest('/user/private/active_sessions');
+// 获取发送了未读消息的用户ID列表 (用于登录初始化红点)
+export const reqGetUnreadSenders = () => getRequest('/user/private/getUnreadSenders');
+// 更新已读了某人的消息
+export const reqUpdateMsgRead = (fromId) => postRequest(`/user/private/updateMsgStateToRead?fromId=${fromId}`);
+
 // 7. 文件上传
 export const reqUploadFile = (params) => postRequest('/user/file', params);
 export const reqOssFileUpload = (params) => postRequest('/user/ossFileUpload', params);

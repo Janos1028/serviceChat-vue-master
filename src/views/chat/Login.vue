@@ -747,72 +747,60 @@ export default {
 }
 </style>
 <style>
-/* 移动端深度适配：平衡舒适度与空间 */
+/* 移动端适配：纯净卡片模式 (无滚动) */
 @media screen and (max-width: 768px) {
-  /* 1. 弹窗整体：仿照登录框的大小和质感 */
   .custom-dialog {
-    width: 380px !important;     /* 尝试匹配登录框的标准宽度 */
-    max-width: 90% !important;   /* 手机屏幕较窄时，强制使用90%宽度 */
-    margin: 0 !important;        /* 清除默认 margin */
+    /* 1. 定位与宽度 */
+    width: 380px !important;     /* 尝试保持标准宽 */
+    max-width: 90% !important;   /* 屏幕窄时自动缩小 */
+    margin: 0 !important;        /* 清除默认边距 */
 
-    /* 强制居中定位 */
+    /* 2. 强制居中 */
     position: fixed !important;
     top: 50% !important;
     left: 50% !important;
     transform: translate(-50%, -50%) !important;
 
-    /* 高度控制：留出一点上下边距，避免贴边 */
-    max-height: 90vh;
+    /* 3. 外观样式 */
+    border-radius: 20px !important;
     display: flex;
     flex-direction: column;
-
-    /* 圆角与登录框保持一致 */
-    border-radius: 20px !important;
   }
 
-  /* 2. 内容区：增加内边距，解决“太挤”的问题 */
+  /* 4. 内部间距 (紧凑一点，防止撑破屏幕) */
   .custom-dialog .el-dialog__body {
-    padding: 20px 25px !important; /* 恢复舒适的左右内边距 */
-    overflow-y: auto;              /* 内容变高了，万一超出屏幕允许滚动 */
-    -webkit-overflow-scrolling: touch; /* iOS 滚动优化 */
+    padding: 20px 25px !important;
   }
 
-  /* 3. 表单项：恢复适中的垂直间距 */
+  /* 5. 表单项间距 */
   .custom-dialog .el-form-item {
-    margin-bottom: 18px !important; /* 比之前的12px宽松，比默认的22px紧凑 */
+    margin-bottom: 22px !important;
   }
 
-  /* 4. 输入框：恢复高度，提升点击手感 */
+  /* 6. 特殊处理：去掉最后一个头像项的下边距 */
+  .custom-dialog .avatar-form-item {
+    margin-bottom: 0 !important;
+  }
+
+  /* 7. 输入框高度适配 */
   .custom-dialog .el-input__inner {
-    height: 40px !important;      /* 40px 是移动端比较舒适的点击高度 */
+    height: 40px !important;
     line-height: 40px !important;
   }
   .custom-dialog .el-input__icon {
     line-height: 40px !important;
   }
 
-  /* 5. 头像区域：大小适中 */
+  /* 8. 头像大小 */
   .custom-dialog .avatar-preview-wrapper {
     width: 60px !important;
     height: 60px !important;
   }
-  .custom-dialog .avatar-selection {
-    gap: 15px !important;
-  }
 
-  /* 6. 头部和底部：微调间距 */
-  .custom-dialog .el-dialog__header {
-    padding: 20px 20px 10px !important;
-  }
+  /* 9. 标题和按钮 */
   .custom-dialog .el-dialog__title {
-    font-size: 18px !important;   /* 标题字号恢复 */
-    font-weight: 600 !important;
+    font-size: 18px !important;
   }
-  .custom-dialog .el-dialog__footer {
-    padding: 10px 20px 25px !important;
-  }
-
-  /* 7. 注册按钮：加高一点，更像登录按钮 */
   .custom-dialog .full-width-btn {
     height: 40px !important;
     font-size: 16px !important;

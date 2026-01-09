@@ -6,6 +6,8 @@ import {
   reqClosePrivateChat,
   reqGetPrivateChatHistory,
   reqGetAllActiveSessions,
+  reqGetUnreadSenders,
+  reqUpdateMsgRead,
   baseUrl
 } from "../utils/api";
 import SockJS from '../utils/sockjs'
@@ -119,12 +121,29 @@ const store = new Vuex.Store({
         date: msg.createTime || new Date(),
         fromNickname: msg.fromNickname,
         messageTypeId: msg.messageTypeId,
-        self: !msg.notSelf
+        self: !msg.notSelf,
+        state: 0// 新发的消息默认为未读
       })
       let targetUser = state.users.find(u => u.username === msg.to);
       if (targetUser) {
         // 使用 Vue.set 确保新增属性是响应式的，能被组件监听到
         Vue.set(targetUser, 'lastMessageTime', msg.createTime || new Date());
+      }
+    },
+
+    // 将我对某人的聊天记录全部标记为已读
+    MARK_SESSION_READ(state, readerUsername) {
+      // readerUsername 是对方的用户名，key = 我#对方
+      let key = state.currentUser.username + "#" + readerUsername;
+      if (state.sessions[key]) {
+        state.sessions[key].forEach(msg => {
+          // 只有是我发的(self=true)，才把状态改为已读
+          if (msg.self) {
+            msg.state = 1;
+          }
+        });
+        // 强制触发 Vue 列表更新
+        Vue.set(state.sessions, key, [...state.sessions[key]]);
       }
     },
 
@@ -135,7 +154,8 @@ const store = new Vuex.Store({
         date: m.createTime,
         fromNickname: m.fromName,
         messageTypeId: m.messageTypeId,
-        self: m.fromId === state.currentUser.id
+        self: m.fromId === state.currentUser.id,
+        state: m.state // 保存后端传来的 0(未读) 或 1(已读)
       }));
       Vue.set(state.sessions, key, formatted);
     },
@@ -153,6 +173,52 @@ const store = new Vuex.Store({
               context.commit('INIT_ACTIVE_SESSIONS', sessionResp.obj);
             }
           });
+
+          // 加载未读消息红点
+          // 确保 currentUser 已存在 (通常 INIT_USER 后就有了，或者从 sessionStorage 取)
+          let user = context.state.currentUser || JSON.parse(window.sessionStorage.getItem("user"));
+          if(user) {
+            reqGetUnreadSenders().then(resp => {
+
+              // 2.解析数据结构
+              // 因为 axios 拦截器返回的是 success.data，所以这里的 resp 就是 {status:200, msg:null, obj:[...]}
+              if (resp && resp.status === 200 && resp.obj && resp.obj.length > 0) {
+
+                let idList = resp.obj; // <--- 关键：从 obj 里拿数组
+                let unreadNicknames = []; // 用于收集发送者的昵称
+                idList.forEach(senderId => {
+                  // 在 users 列表中找到对应的 username
+                  // 注意：senderId 是数字，u.id 也是数字，可以直接比较
+                  let sender = context.state.users.find(u => u.id === senderId);
+
+                  if(sender) {
+                    // 生成 key: 当前用户#发送者，设为 true
+                    // 使用 Vue.set 确保界面能监听到变化
+                    Vue.set(context.state.isDot, user.username + "#" + sender.username, true);
+                    unreadNicknames.push(sender.nickname);
+                  }
+                });
+                if (unreadNicknames.length > 0) {
+                  // 去重并限制显示的名称数量，防止弹窗内容过长
+                  let uniqueNames = [...new Set(unreadNicknames)];
+                  let content = uniqueNames.slice(0, 3).join('、');
+                  if (uniqueNames.length > 3) {
+                    content += ` 等 ${uniqueNames.length} 人`;
+                  }
+
+                  Notification.info({
+                    title: '离线消息提醒',
+                    message: `您收到来自 ${content} 的未读消息，请及时查看。`,
+                    position: "top-right",
+                    duration: 10000, // 显示10秒，确保用户能看到
+                    onClick: () => {
+                      // 点击弹窗可以做些逻辑，比如不做任何事，或者跳转到第一个未读的人
+                    }
+                  });
+                }
+              }
+            });
+          }
         }
       });
     },
@@ -188,6 +254,9 @@ const store = new Vuex.Store({
             username: toUser.username,
             messages: data
           });
+          // 调用后端接口，把红点消掉，并通知对方“我读了”
+          // 这里的参数是对方的 ID
+          reqUpdateMsgRead(toUser.id);
         }
       });
     },
@@ -214,39 +283,45 @@ const store = new Vuex.Store({
             audio.play().catch(e => console.log("播放失败", e));
           }
 
-          // 【修复点 1】: 弹窗通知逻辑
+          // 弹窗通知逻辑
           // 增加条件：receiveMsg.from !== context.state.currentUser.username
           // 只有“发送者不是我自己” 且 (“当前没有会话” 或 “消息来源不是当前正在聊的人”) 时，才弹窗
-          if (
-              receiveMsg.from !== context.state.currentUser.username &&
-              (!context.state.currentSession || receiveMsg.from != context.state.currentSession.username)
-          ) {
-            // 过滤系统消息
-            if (!receiveMsg.messageTypeId || receiveMsg.messageTypeId <= 3) {
+          if (receiveMsg.from !== context.state.currentUser.username) {
 
-              // 直接调用 Notification，允许堆叠
-              Notification.info({
-                title: '【' + receiveMsg.fromNickname + '】发来消息',
-                message: receiveMsg.content.length > 15 ? receiveMsg.content.substr(0, 15) + '...' : receiveMsg.content,
+            // 场景 1: 我当前没有打开聊天窗口，或者打开的窗口不是这个人
+            // 动作: 弹窗通知 + 显示红点
+            if (!context.state.currentSession || receiveMsg.from != context.state.currentSession.username) {
 
-                // 【关键设置】位置在右上角
-                position: "top-right",
-
-                // 3秒后自动消失，避免消息太多占满屏幕
-                duration: 3000,
-
-                customClass: 'chat-notification',
-                onClick: () => {
-                  let senderUser = context.state.users.find(u => u.username === receiveMsg.from);
-                  if (senderUser) {
-                    context.commit('changeCurrentSession', senderUser);
-                    context.dispatch('loadPrivateHistory', senderUser);
+              // (原有的弹窗逻辑保持不变)
+              if (!receiveMsg.messageTypeId || receiveMsg.messageTypeId <= 3) {
+                Notification.info({
+                  title: '【' + receiveMsg.fromNickname + '】发来消息',
+                  message: receiveMsg.content.length > 15 ? receiveMsg.content.substr(0, 15) + '...' : receiveMsg.content,
+                  position: "top-right",
+                  duration: 5000,
+                  customClass: 'chat-notification',
+                  onClick: () => {
+                    let senderUser = context.state.users.find(u => u.username === receiveMsg.from);
+                    if (senderUser) {
+                      context.commit('changeCurrentSession', senderUser);
+                      context.dispatch('loadPrivateHistory', senderUser);
+                    }
                   }
-                }
-              });
+                });
+              }
+              // 标记红点
+              Vue.set(context.state.isDot, context.state.currentUser.username + "#" + receiveMsg.from, true);
             }
-            // 标记红点
-            Vue.set(context.state.isDot, context.state.currentUser.username + "#" + receiveMsg.from, true);
+
+                // 场景 2: 我当前正打开着窗口跟这个人聊天
+            // 动作: 不需要弹窗，不需要红点，直接告诉后端“已读”
+            else {
+              // 1. 调用后端接口，告诉对方“我已读” (传入当前会话对象的ID)
+              reqUpdateMsgRead(context.state.currentSession.id);
+
+              // 2. 本地将这条消息状态设为 1 (已读)，保持数据一致
+              receiveMsg.state = 1;
+            }
           }
 
 
@@ -307,6 +382,13 @@ const store = new Vuex.Store({
                 });
               }
             }
+          }
+
+          // 处理已读回执
+          else if (payload.type === 'READ_RECEIPT') {
+            // payload.readerName 是读了消息的人（即对方的 username）
+            // 触发 mutation 更新界面
+            context.commit('MARK_SESSION_READ', payload.readerName);
           }
         });
 
