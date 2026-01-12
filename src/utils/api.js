@@ -178,6 +178,7 @@ export const reqDeleteGroupMsgById = (id) => deleteRequest(`/admin/GroupMsgConte
 export const reqDeleteGroupMsgByIds = (params) => deleteRequest('/admin/GroupMsgContent/deleteGroupMsgContentByIds', params);
 
 // 6. 聊天相关
+export const reqGetRecentConversation = () => getRequest('/user/chat/getRecentConversation');
 export const reqGetChatUsers = () => getRequest('/user/chat/getUsersWithoutCurrentUser');
 // 注意：后端使用 @RequestParam，为了稳妥，我们这里直接拼接到URL上，或者使用 params 对象
 export const reqStartPrivateChat = (toId) => postRequest(`/user/private/start?toId=${toId}`);

@@ -3,6 +3,7 @@ import Vuex from 'vuex'
 import {
   reqGetChatUsers,
   reqStartPrivateChat,
+  reqGetRecentConversation,
   reqClosePrivateChat,
   reqGetPrivateChatHistory,
   reqGetAllActiveSessions,
@@ -31,7 +32,8 @@ const store = new Vuex.Store({
     stomp: null,
     isDot: {},
     errorImgUrl: "http://39.108.169.57/group1/M00/00/00/J2ypOV7wJkyAAv1fAAANuXp4Wt8303.jpg",
-    shotHistory: {}
+    shotHistory: {},
+    hiddenSessions: JSON.parse(localStorage.getItem('hiddenSessions') || '{}'),
   },
   mutations: {
     initRoutes(state, data) {
@@ -52,6 +54,32 @@ const store = new Vuex.Store({
       state.filterKey = '';
       // 如果 stomp 连接还在，最好也置空（虽然 disconnect 已经断开了）
       state.stomp = null;
+    },
+    // 批量删除会话（其实是隐藏）
+    BATCH_DELETE_SESSIONS(state, usernames) {
+      const now = new Date().getTime();
+
+      // 1. 将选中的用户名加入黑名单，并记录当前时间
+      if (!state.hiddenSessions) {
+        Vue.set(state, 'hiddenSessions', {});
+      }
+
+      usernames.forEach(username => {
+        // 现在 state.hiddenSessions 肯定有值了，不会报错了
+        Vue.set(state.hiddenSessions, username, now);
+      });
+
+      // 存入 LocalStorage
+      localStorage.setItem('hiddenSessions', JSON.stringify(state.hiddenSessions));
+
+      // 从界面移除
+      state.users = state.users.filter(u => !usernames.includes(u.username));
+
+      // 如果当前正在聊的人被删了，重置聊天框
+      if (state.currentSession && usernames.includes(state.currentSession.username)) {
+        state.currentSession = null;
+        state.isPrivateChatActive = false;
+      }
     },
 
     // 更新用户在线状态
@@ -164,62 +192,105 @@ const store = new Vuex.Store({
     }
   },
   actions: {
-    initData(context) {
-      reqGetChatUsers().then(resp => {
+    initData(context, options = {}) {
+      // 1. 获取当前用户信息
+      let currentUser = context.state.currentUser || JSON.parse(window.sessionStorage.getItem("user"));
+      if (!currentUser) return;
+
+      // 2. 根据用户身份决定调用哪个接口
+      let requestPromise;
+      if (currentUser.userTypeId === 1) {
+        // 如果是支撑人员，必须调用这个新接口！
+        // 确保你在文件头部 import 中已经引入了 reqGetRecentConversation
+        requestPromise = reqGetRecentConversation();
+      } else {
+        // 普通用户还是用原来的逻辑
+        requestPromise = reqGetChatUsers();
+      }
+
+      // 3. 执行请求
+      requestPromise.then(resp => {
         if (resp) {
-          context.commit('INIT_USER', resp);
-          reqGetAllActiveSessions().then(sessionResp => {
-            if(sessionResp && sessionResp.status === 200) {
-              context.commit('INIT_ACTIVE_SESSIONS', sessionResp.obj);
-            }
-          });
+          // 兼容处理：后端可能直接返回数组，也可能封装在 obj 里
+          let userList = resp.obj || resp;
 
-          // 加载未读消息红点
-          // 确保 currentUser 已存在 (通常 INIT_USER 后就有了，或者从 sessionStorage 取)
-          let user = context.state.currentUser || JSON.parse(window.sessionStorage.getItem("user"));
-          if(user) {
-            reqGetUnreadSenders().then(resp => {
+          if (userList) {
+            // 简单的数据清洗：确保 lastMessageTime 字段存在（用于排序）
+            userList = userList.map(u => ({
+              ...u,
+              // 后端VO里的 lastMsgTime 映射给前端的 lastMessageTime
+              lastMessageTime: u.lastMsgTime || u.lastMessageTime
+            }));
 
-              // 2.解析数据结构
-              // 因为 axios 拦截器返回的是 success.data，所以这里的 resp 就是 {status:200, msg:null, obj:[...]}
-              if (resp && resp.status === 200 && resp.obj && resp.obj.length > 0) {
+            // 只有当 (用户不在黑名单) 或者 (用户虽然在黑名单，但有比删除时间更新的消息) 时，才显示
+            let hiddenSessions = context.state.hiddenSessions || {};
 
-                let idList = resp.obj; // <--- 关键：从 obj 里拿数组
-                let unreadNicknames = []; // 用于收集发送者的昵称
-                idList.forEach(senderId => {
-                  // 在 users 列表中找到对应的 username
-                  // 注意：senderId 是数字，u.id 也是数字，可以直接比较
-                  let sender = context.state.users.find(u => u.id === senderId);
+            userList = userList.filter(u => {
+              // 1. 如果没被删过，保留
+              if (!hiddenSessions[u.username]) return true;
 
-                  if(sender) {
-                    // 生成 key: 当前用户#发送者，设为 true
-                    // 使用 Vue.set 确保界面能监听到变化
-                    Vue.set(context.state.isDot, user.username + "#" + sender.username, true);
-                    unreadNicknames.push(sender.nickname);
-                  }
-                });
-                if (unreadNicknames.length > 0) {
-                  // 去重并限制显示的名称数量，防止弹窗内容过长
-                  let uniqueNames = [...new Set(unreadNicknames)];
-                  let content = uniqueNames.slice(0, 3).join('、');
-                  if (uniqueNames.length > 3) {
-                    content += ` 等 ${uniqueNames.length} 人`;
-                  }
+              // 2. 如果被删过，检查最后一条消息的时间
+              if (!u.lastMessageTime) return false; // 没时间的旧数据直接隐藏
 
-                  Notification.info({
-                    title: '离线消息提醒',
-                    message: `您收到来自 ${content} 的未读消息，请及时查看。`,
-                    position: "top-right",
-                    duration: 10000, // 显示10秒，确保用户能看到
-                    onClick: () => {
-                      // 点击弹窗可以做些逻辑，比如不做任何事，或者跳转到第一个未读的人
+              let msgTime = new Date(u.lastMessageTime).getTime();
+              let deleteTime = hiddenSessions[u.username];
+
+              // 只有 新消息时间 > 删除操作时间，才让它“复活”
+              return msgTime > deleteTime;
+            });
+
+            context.commit('INIT_USER', userList);
+
+            // 加载完用户后，再加载活跃会话状态 (红点/正在聊天状态)
+            reqGetAllActiveSessions().then(sessionResp => {
+              if(sessionResp && sessionResp.status === 200) {
+                context.commit('INIT_ACTIVE_SESSIONS', sessionResp.obj);
+              }
+            });
+
+                // 加载未读消息红点
+                // 确保 currentUser 已存在 (通常 INIT_USER 后就有了，或者从 sessionStorage 取)
+                let user = context.state.currentUser || JSON.parse(window.sessionStorage.getItem("user"));
+                if (user) {
+                  reqGetUnreadSenders().then(resp => {
+
+                    // 2.解析数据结构
+                    // 因为 axios 拦截器返回的是 success.data，所以这里的 resp 就是 {status:200, msg:null, obj:[...]}
+                    if (resp && resp.status === 200 && resp.obj && resp.obj.length > 0) {
+
+                      let idList = resp.obj; // <--- 关键：从 obj 里拿数组
+                      let unreadNicknames = []; // 用于收集发送者的昵称
+                      idList.forEach(senderId => {
+                        // 在 users 列表中找到对应的 username
+                        // 注意：senderId 是数字，u.id 也是数字，可以直接比较
+                        let sender = context.state.users.find(u => u.id === senderId);
+
+                        if (sender) {
+                          // 生成 key: 当前用户#发送者，设为 true
+                          // 使用 Vue.set 确保界面能监听到变化
+                          Vue.set(context.state.isDot, user.username + "#" + sender.username, true);
+                          unreadNicknames.push(sender.nickname);
+                        }
+                      });
+                      if (!options.silent && unreadNicknames.length > 0) {
+                        let uniqueNames = [...new Set(unreadNicknames)];
+                        let content = uniqueNames.slice(0, 3).join('、');
+                        if (uniqueNames.length > 3) {
+                          content += ` 等 ${uniqueNames.length} 人`;
+                        }
+                        Notification.info({
+                          title: '离线消息提醒',
+                          message: `您收到来自 ${content} 的未读消息，请及时查看。`,
+                          position: "top-right",
+                          duration: 10000,
+                          onClick: () => {}
+                        });
+                      }
                     }
                   });
                 }
               }
-            });
-          }
-        }
+            }
       });
     },
     startPrivateChat({ commit }, toUser) {
@@ -276,7 +347,17 @@ const store = new Vuex.Store({
         // 订阅聊天消息
         context.state.stomp.subscribe('/user/queue/chat', msg => {
           let receiveMsg = JSON.parse(msg.body);
+        // 排除自己发的消息
+          if (receiveMsg.from !== context.state.currentUser.username) {
+            let senderUser = context.state.users.find(u => u.username === receiveMsg.from);
 
+            // 如果列表里没这个人（说明是新开启的会话，或者是以前的会话被过滤掉了）
+            if (!senderUser) {
+              console.log("收到新用户的消息，正在刷新列表...", receiveMsg.from);
+              context.dispatch('initData', { silent: true });
+              // 立即刷新列表，这样左侧列表就会出现这个人，弹窗点击也能找到人了
+            }
+          }
           // 播放提示音 (这一步判断是正确的：不是自己发的才响)
           if (receiveMsg.from !== context.state.currentUser.username) {
             let audio = new Audio(notifySound);
@@ -294,17 +375,30 @@ const store = new Vuex.Store({
 
               // (原有的弹窗逻辑保持不变)
               if (!receiveMsg.messageTypeId || receiveMsg.messageTypeId <= 3) {
-                Notification.info({
+                let notifyInstance = Notification.info({
                   title: '【' + receiveMsg.fromNickname + '】发来消息',
                   message: receiveMsg.content.length > 15 ? receiveMsg.content.substr(0, 15) + '...' : receiveMsg.content,
                   position: "top-right",
                   duration: 5000,
                   customClass: 'chat-notification',
+                  showClose: true,
                   onClick: () => {
-                    let senderUser = context.state.users.find(u => u.username === receiveMsg.from);
-                    if (senderUser) {
-                      context.commit('changeCurrentSession', senderUser);
-                      context.dispatch('loadPrivateHistory', senderUser);
+                    notifyInstance.close();
+                    // 因为上面调用了 initData，现在 users 里应该已经有这个人了
+                    let latestUsers = context.state.users;
+                    let targetUser = latestUsers.find(u => u.username === receiveMsg.from);
+
+                    if (targetUser) {
+                      context.commit('changeCurrentSession', targetUser);
+                      // 如果不是群聊，加载历史记录
+                      if (targetUser.username !== '群聊') {
+                        context.dispatch('loadPrivateHistory', targetUser);
+                      }
+                    } else {
+                      // 极端情况：点击太快，initData 还没回来，或者网络错误
+                      console.warn("用户列表尚未同步完成，无法跳转");
+                      // 可以选择再次尝试刷新
+                      context.dispatch('initData');
                     }
                   }
                 });

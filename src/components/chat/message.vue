@@ -2,7 +2,7 @@
   <div id="message" v-scroll-bottom="sessions">
 
     <div class="limit-tip" v-if="currentSession">
-      <i class="el-icon-info"></i> 系统仅显示最近五次会话的聊天记录
+      <i class="el-icon-info"></i> 系统仅显示最近三天会话的聊天记录
     </div>
 
     <div v-if="currentSession && sessions">
