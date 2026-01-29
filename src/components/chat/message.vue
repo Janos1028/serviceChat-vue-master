@@ -169,7 +169,7 @@
                 <span class="time-tip">{{ entry.date | time }}</span>
               </div>
             </div>
-            <img v-if="entry.self" class="avatar self-avatar" :src="currentUser.userProfile">
+            <img v-if="entry.self" class="avatar self-avatar" :src="currentUser.userProfile || defaultAvatar">
           </div>
         </div>
       </div>
@@ -214,6 +214,7 @@
 <script>
 import {mapState} from 'vuex'
 import serviceAvatar from '@/assets/客服头像.png'
+import defaultAvatar from '@/assets/default.png'
 import {
   reqGetSupportServiceCategories,
   reqSubmitScore,
@@ -234,7 +235,8 @@ export default {
       screenWidth: document.body.clientWidth,
       tempScores: {},
       isUserScrollingUp: false, // 用户是否往上滚了（不在底部）
-      unreadNewMsgCount: 0      // 累积的未读新消息数
+      unreadNewMsgCount: 0,      // 累积的未读新消息数
+      defaultAvatar: defaultAvatar,
     }
   },
   computed: {
@@ -320,7 +322,7 @@ export default {
       }).then(() => {
         reqClosePrivateChat(conversationId, entry.id).then(resp => {
           if (resp && resp.status === 200) {
-            this.$set(entry, 'state', 3); // 更新本地视图
+            this.$set(entry, 'state', 3);
           }
         });
       }).catch(() => {});
@@ -504,7 +506,7 @@ export default {
         // 绝对不去查什么 realInfo
         return this.serviceAvatar;
       } else {
-        return entry.fromProfile || this.currentSession.userProfile || '...';
+        return entry.fromProfile || this.currentSession.userProfile || this.defaultAvatar;
       }
     },
 

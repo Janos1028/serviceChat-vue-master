@@ -210,6 +210,49 @@ const store = new Vuex.Store({
       }
     },
     addMessage(state, msg) {
+
+      if (msg.messageTypeId === 7) {
+
+        // 1. 【场景：客服发起 -> 通知用户】
+        // 如果我是普通用户 (userTypeId != 1)，且收到 state=2 (客服发起了结束申请)
+        if (state.currentUser && state.currentUser.userTypeId !== 1) {
+          if (msg.state === 2) {
+            Notification.warning({
+              title: '服务确认',
+              message: '客服已发起服务结束申请，请您确认问题是否已解决。',
+              duration: 0, // 设置为 0 则不会自动关闭，需要用户手动点叉，避免漏看
+              position: 'top-right',
+              offset: 50,
+              zIndex: 9999,
+            });
+          }
+        }
+
+        // 2. 【场景：用户反馈 -> 通知客服】
+        // 如果我是客服人员 (userTypeId == 1)，且收到用户的反馈 (state 3或4)
+        if (state.currentUser && state.currentUser.userTypeId === 1) {
+
+          // 用户点击了“已解决”
+          if (msg.state === 3) {
+            Notification.success({
+              title: '服务结束',
+              message: '用户已确认问题解决，本次服务结束。',
+              duration: 5000 // 5秒后自动消失
+            });
+          }
+
+          // 用户点击了“未解决”
+          else if (msg.state === 4) {
+            Notification.error({ // 用红色报错样式，醒目
+              title: '用户反馈',
+              message: '用户反馈问题未解决，请继续跟进！',
+              duration: 0, // 不自动关闭，直到客服看到
+              zIndex: 9999,
+            });
+          }
+        }
+      }
+
       if (msg.messageTypeId === 5) {
         const timeoutMsg1 = "当前对话调度人员超时未响应，已为您分配其他调度人员进行支撑。";
         const timeoutMsg2 = "您超时未响应，系统已分配其他调度人员进行支撑。";

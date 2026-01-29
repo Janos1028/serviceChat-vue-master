@@ -27,12 +27,14 @@
 import {mapState} from 'vuex'
 // 引入本地默认头像
 import serviceAvatar from '@/assets/客服头像.png'
+import defaultAvatar from "@/assets/default.png";
 
 export default {
   name: 'chattitle',
   data() {
     return {
-      serviceAvatar: serviceAvatar
+      serviceAvatar: serviceAvatar,
+      defaultAvatar: defaultAvatar
     }
   },
   computed: {
@@ -49,7 +51,7 @@ export default {
       if (this.isVirtualService) {
         return this.serviceAvatar;
       }
-      return this.currentSession.userProfile;
+      return this.currentSession.userProfile || this.defaultAvatar;
     }
   }
 }

@@ -19,7 +19,7 @@
       >
 
         <div class="avatar-wrapper" :class="{ 'offline': currentUser.userTypeId === 1 && item.userStateId === 0 }">
-          <img class="avatar" :src="item.userProfile" :alt="item.nickname">
+          <img class="avatar" :src="item.userProfile || defaultAvatar" :alt="item.nickname">
           <span v-if="currentUser.userTypeId === 1" class="status-dot" :class="{ 'online': item.userStateId === 1 }"></span>
         </div>
 
@@ -45,11 +45,12 @@
 
 <script>
 import {mapState} from 'vuex'
-
+import defaultAvatar from '@/assets/default.png'
 export default {
   name: 'list',
   data() {
     return {
+      defaultAvatar: defaultAvatar
     }
   },
   computed: {

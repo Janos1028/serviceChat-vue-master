@@ -2,7 +2,7 @@
   <div id="card">
     <div class="user-info-box">
       <div class="avatar-container">
-        <img v-if="user.userProfile" class="avatar" :src="user.userProfile" :alt="user.nickname">
+        <img class="avatar" :src="user.userProfile || defaultAvatar" :alt="user.nickname">
         <span class="status-dot" :class="statusClass"></span>
       </div>
 
@@ -50,13 +50,15 @@
 
 <script>
 import { reqUserLogout, reqChangeUserState, reqGetCard } from "@/utils/api";
+import defaultAvatar from "@/assets/default.png";
 
 export default {
   name: 'card',
   data () {
     return {
       // 1. 【修改】初始化为空对象，不再从 sessionStorage 获取
-      user: {}
+      user: {},
+      defaultAvatar: defaultAvatar,
     }
   },
   computed: {
