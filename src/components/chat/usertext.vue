@@ -1,233 +1,583 @@
 <template>
-  <div id="usertext">
+  <div id="usertext" :class="{ 'is-disabled': !isChatActive }">
+    <div v-if="currentSession" class="input-mode">
 
-    <div class="top-right-actions" v-if="currentSession">
-      <el-button
-          v-if="!isPrivateChatActive && currentSession.username !== '群聊'"
-          type="primary"
-          key="start-btn"
-          size="mini"
-          round
-          class="action-btn"
-          :disabled="user.userTypeId == null || user.userTypeId == 1"
-          :title="user.userTypeId == null || user.userTypeId == 1 ? '您无权主动开启会话' : '开启会话'"
-          @click.prevent="startChat"
-      >
-        开启会话
-      </el-button>
+      <div class="chat-toolbar">
 
-      <el-button
-          v-else-if="isPrivateChatActive && currentSession.username !== '群聊'"
-          key="end-btn"
-          type="danger"
-          size="mini"
-          round
-          class="action-btn"
-          native-type="button"
-          @click.prevent="endChat"
-      >
-        结束会话
-      </el-button>
-    </div>
+        <div class="toolbar-left">
+          <div class="tool-btn"
+               v-popover:emojiPopover
+               title="插入表情">
+            <svg class="icon emoji-icon" viewBox="0 0 1024 1024" width="24" height="24"><path d="M512 85.333333c235.648 0 426.666667 191.018667 426.666667 426.666667s-191.018667 426.666667-426.666667 426.666667S85.333333 747.648 85.333333 512 276.352 85.333333 512 85.333333z m0 64C311.808 149.333333 149.333333 311.808 149.333333 512s162.474667 362.666667 362.666667 362.666667 362.666667-162.474667 362.666667-362.666667S712.192 149.333333 512 149.333333z m-106.666667 234.666667a42.666667 42.666667 0 1 1 0 85.333333 42.666667 42.666667 0 0 1 0-85.333333z m213.333334 0a42.666667 42.666667 0 1 1 0 85.333333 42.666667 42.666667 0 0 1 0-85.333333z m-106.666667 213.333333c86.4 0 161.706667 52.266667 195.84 128H290.816c34.133333-75.733333 109.44-128 195.84-128z" p-id="2567"></path></svg>
+          </div>
 
-    <div class="mask-layer" v-if="shouldDisable">
-      <span class="mask-text">请点击右上角“开启会话”开始聊天</span>
-    </div>
+          <el-upload
+              class="upload-wrapper"
+              action="/api/user/file"
+              :show-file-list="false"
+              :on-success="handleImgSuccess"
+              :before-upload="beforeImgUpload"
+              :disabled="!isChatActive"
+          >
+            <div class="tool-btn" title="发送图片">
+              <i class="el-icon-picture-outline icon"></i>
+            </div>
+          </el-upload>
 
-    <div class="chat-toolbar">
-      <div class="tool-item" @click.stop="toggleEmoji" title="表情">
-        <svg class="icon" viewBox="0 0 1024 1024" width="22" height="22"><path d="M512 85.333333C276.352 85.333333 85.333333 276.352 85.333333 512s191.018667 426.666667 426.666667 426.666667 426.666667-191.018667 426.666667-426.666667S747.648 85.333333 512 85.333333z m0 768c-188.48 0-341.333333-152.853333-341.333333-341.333333s152.853333-341.333333 341.333333-341.333333 341.333333 152.853333 341.333333 341.333333-152.853333 341.333333-341.333333 341.333333zM341.333333 426.666667a42.666667 42.666667 0 1 1 0-85.333334 42.666667 42.666667 0 0 1 0 85.333334z m341.333334 0a42.666667 42.666667 0 1 1 0-85.333334 42.666667 42.666667 0 0 1 0 85.333334z m-341.333334 170.666666h341.333334c-19.626667 85.333333-108.373333 149.333333-192 149.333334h-42.666667c-65.706667 0-160.426667-64-180.266667-149.333334z" fill="#666666"></path></svg>
-      </div>
-      <div class="tool-item" @click="triggerFileUpload" title="发送图片/文件">
-        <i class="el-icon-paperclip" style="font-size: 20px; color: #666;"></i>
-      </div>
-      <input type="file" ref="fileInput" style="display: none" @change="handleFileChange">
-
-      <div class="emoji-box" v-if="showEmoji" @click.stop>
-        <div class="emoji-list">
-          <span v-for="(item, index) in emojis" :key="index" class="emoji-item" @click="selectEmoji(item.char)">{{ item.char }}</span>
+          <el-upload
+              class="upload-wrapper"
+              action="/api/user/file"
+              :show-file-list="false"
+              :on-success="handleFileSuccess"
+              :disabled="!isChatActive"
+          >
+            <div class="tool-btn" title="发送文件">
+              <i class="el-icon-folder-add icon"></i>
+            </div>
+          </el-upload>
         </div>
+
+        <div v-if="currentUser && currentUser.userTypeId === 1" class="action-btn-group">
+          <el-button
+              type="primary"
+              size="mini"
+              round
+              plain
+              title="转接会话"
+              @click="openTransferDialog"
+              :disabled="!isChatActive"
+              style="margin-right: 8px;"
+          >
+            转接
+          </el-button>
+
+          <el-button
+              type="danger"
+              size="mini"
+              round
+              plain
+              @click="endChat"
+              :disabled="!isChatActive"
+          >
+            结束服务
+          </el-button>
+        </div>
+
+        <el-popover
+            ref="emojiPopover"
+            placement="top-start"
+            width="320"
+            trigger="click"
+            v-model="showEmoji"
+            :disabled="!isChatActive"
+            popper-class="emoji-popper">
+          <div class="emoji-list">
+            <div class="emoji-item" v-for="(item, i) in emotions" :key="i" @click="addEmotion(item)">{{item}}</div>
+          </div>
+        </el-popover>
       </div>
-    </div>
 
-    <textarea
-        class="chat-textarea"
-        placeholder="请输入内容..."
-        v-model="content"
-        :disabled="shouldDisable"
-        @keyup.enter.exact="sendTextMessage"
-        @click="showEmoji = false"
-    ></textarea>
+      <div class="textarea-wrapper">
+        <textarea
+            class="chat-textarea"
+            :placeholder="placeholderText"
+            v-model="content"
+            :disabled="!isChatActive"
+            @keydown="handleKey">
+        </textarea>
+      </div>
 
-    <div class="chat-footer">
-      <button
-          class="send-btn"
-          :class="{'btn-disabled': shouldDisable}"
-          :disabled="shouldDisable"
-          @click="sendTextMessage"
-      >发送</button>
+      <div class="chat-footer">
+        <span class="tip-text" v-if="isChatActive">按 Enter 发送，Shift + Enter 换行</span>
+        <el-button
+            type="primary"
+            size="small"
+            class="send-btn"
+            :disabled="!isChatActive"
+            @click="addMessageByClick"
+        >
+          发送
+        </el-button>
+      </div>
+      <el-dialog
+          title="转接服务"
+          :visible.sync="transferDialogVisible"
+          :width="dialogWidth"
+          :append-to-body="true"
+          :close-on-click-modal="false"
+          custom-class="centered-dialog">
+
+        <div class="transfer-content">
+          <div class="transfer-tip">
+            <i class="el-icon-warning-outline"></i>
+            <span>转接后您将退出当前会话，由新团队接手。</span>
+          </div>
+
+          <p class="label">请选择目标服务团队：</p>
+          <el-select
+              v-model="selectedTransferServiceId"
+              placeholder="请选择服务类型"
+              style="width: 100%;"
+              :loading="transferLoading">
+            <el-option
+                v-for="item in transferServiceList"
+                :key="item.id"
+                :label="item.name"
+                :value="item.id">
+            </el-option>
+          </el-select>
+        </div>
+
+        <span slot="footer" class="dialog-footer">
+          <el-button @click="transferDialogVisible = false" size="small">取 消</el-button>
+          <el-button type="primary" @click="confirmTransfer" :loading="transferLoading" size="small">确认转接</el-button>
+        </span>
+      </el-dialog>
     </div>
   </div>
 </template>
 
 <script>
-import { mapState, mapActions } from 'vuex' // 【修改】引入 mapActions
-import emojisData from '../../utils/emoji.json'
-import { reqOssFileUpload } from '../../utils/api'
+import { mapState } from 'vuex'
+import emotions from '../../utils/emoji.json'
+import {
+  reqClosePrivateChat,
+  reqTransferChat,
+  reqGetSupportServiceCategories,
+  reqRequestClosePrivateChat
+} from "../../utils/api";
 
 export default {
   name: 'usertext',
   data() {
     return {
       content: '',
+      emotions: emotions,
       showEmoji: false,
-      emojis: emojisData
+      transferDialogVisible: false,
+      transferLoading: false,
+      transferServiceList: [],
+      selectedTransferServiceId: null,
     }
   },
   computed: {
-    ...mapState(['currentSession', 'isPrivateChatActive', 'currentUser']),
-
-    user() {
-      return this.currentUser || JSON.parse(window.sessionStorage.getItem('user')) || {};
+    ...mapState(['sessions', 'currentSession', 'currentUser']),
+    isChatActive() {
+      return this.currentSession && !!this.currentSession.conversationId;
     },
-
-    shouldDisable() {
-      if (!this.currentSession) return true;
-      if (this.currentSession.username === '群聊') return false;
-      return !this.isPrivateChatActive;
+    dialogWidth() {
+      return this.screenWidth < 768 ? '80%' : '400px';
+    },
+    placeholderText() {
+      if (this.isChatActive) {
+        return ''; // 活跃状态下留空，因为底部有提示
+      } else {
+        if (this.currentUser && this.currentUser.userTypeId === 1) {
+          return '当前会话未开启或已结束，无法发送消息';
+        } else {
+          return '请点击上方聊天页面中的【人工服务】开启会话';
+        }
+      }
     }
   },
+  mounted() {
+    window.addEventListener('resize', this.handleResize);
+  },
+  beforeDestroy() {
+    window.removeEventListener('resize', this.handleResize);
+  },
   methods: {
-    // 【新增】引入开启/结束会话的 Action
-    ...mapActions(['startPrivateChat', 'endPrivateChat']),
-
-    // 【新增】开启会话逻辑
-    startChat() {
-      if (this.user.userTypeId == null || this.user.userTypeId == 1) {
-        this.$message.warning('您无权主动开启会话');
+    handleResize() {
+      this.screenWidth = document.body.clientWidth;
+    },
+    addMessageByClick() {
+      if (!this.isChatActive) return;
+      if (!this.content || this.content.match(/^[ ]*$/)) {
+        this.$message({ showClose: true, message: '不能发送空白信息', type: 'warning' });
         return;
       }
-      this.startPrivateChat(this.currentSession);
+      this.sendMessage(this.content, 1);
+    },
+    handleKey(e) {
+      if (!this.isChatActive) return;
+
+      // 如果按下了 Enter 键
+      if (e.keyCode === 13) {
+        if (e.shiftKey) {
+          // 如果同时按住了 Shift -> 允许默认行为 (换行)
+          // 不做任何操作，浏览器会自动插入 \n
+        } else {
+          // 如果只按了 Enter -> 发送消息
+          e.preventDefault(); // 阻止默认的换行行为
+
+          if (this.content.length && !this.content.match(/^[ ]*$/)) {
+            this.sendMessage(this.content, 1);
+          } else {
+            this.$message({ showClose: true, message: '不能发送空白信息', type: 'warning' });
+          }
+        }
+      }
     },
 
-    // 【新增】结束会话逻辑
+    sendMessage(content, type) {
+      // 无论我是普通用户(发给客服ID) 还是 客服(发给用户ID)
+      // currentSession.id 现在存储的都是“对方的真实ID”
+      let targetId = this.currentSession.id;
+
+      // 安全校验
+      if (!targetId) {
+        this.$message.error("无法确定消息接收对象，请刷新重试");
+        return;
+      }
+
+      let msgObj = {
+        to: targetId.toString(), // 直接发送 ID 字符串
+        content: content,
+        messageTypeId: type,
+        conversationId: this.currentSession.conversationId,
+        serviceDomainId: this.currentSession.serviceDomainId,
+      }
+
+
+      // 发送
+      if (this.$store.state.stomp && this.$store.state.stomp.connected) {
+        this.$store.state.stomp.send('/app/ws/chat', {}, JSON.stringify(msgObj));
+      } else {
+        this.$message.error("连接已断开，请刷新页面");
+      }
+
+      this.content = '';
+      this.showEmoji = false;
+    },
+    addEmotion(item) {
+      this.content += item;
+      this.showEmoji = false;
+    },
+    handleImgSuccess(res, file) {
+      if(res.status === 200) {
+        this.sendMessage(res.obj, 2);
+      } else {
+        this.$message.error(res.msg);
+      }
+    },
+    beforeImgUpload(file) {
+      const isLt2M = file.size / 1024 / 1024 < 10;
+      if (!isLt2M) {
+        this.$message.error('上传图片大小不能超过 10MB!');
+      }
+      return isLt2M;
+    },
+    handleFileSuccess(res, file) {
+      if(res.status === 200) {
+        this.sendMessage(res.obj, 3);
+      } else {
+        this.$message.error(res.msg);
+      }
+    },
+
+    openTransferDialog() {
+      // 优先取 currentSession 的 domainId，没有则取当前客服的
+      let domainId = this.currentSession.serviceDomainId;
+      if (!domainId && this.currentUser) {
+        domainId = this.currentUser.serviceDomainId;
+      }
+
+      if (!domainId) {
+        this.$message.error("无法获取当前服务域信息");
+        return;
+      }
+
+      this.transferLoading = true;
+      this.transferServiceList = [];
+      this.selectedTransferServiceId = null;
+      this.transferDialogVisible = true;
+
+      reqGetSupportServiceCategories(domainId).then(resp => {
+        this.transferLoading = false;
+        let list = (resp && (resp.obj || resp)) || [];
+        this.transferServiceList = list;
+
+        if (this.transferServiceList.length === 0) {
+          this.$message.warning("当前域下暂无其他可转接的服务团队");
+        }
+      }).catch(err => {
+        this.transferLoading = false;
+        this.$message.error("获取服务列表失败");
+      });
+    },
+
+    // 【新增】确认转接
+    confirmTransfer() {
+      if (!this.selectedTransferServiceId) {
+        this.$message.warning("请选择要转接的服务团队");
+        return;
+      }
+
+      this.transferLoading = true;
+      let conversationId = this.currentSession.conversationId;
+      let domainId = this.currentSession.serviceDomainId || this.currentUser.serviceDomainId;
+
+      reqTransferChat(conversationId, this.selectedTransferServiceId, domainId).then(resp => {
+        this.transferLoading = false;
+        if (resp && resp.status === 200) {
+          this.transferDialogVisible = false;
+
+          // 转接成功后，清理当前会话状态
+          this.$store.commit('SET_CHAT_ACTIVE', {
+            conversationId: null,
+            isActive: false,
+            userId: this.currentSession.id
+          });
+        } else {
+          this.$message.error(resp.msg || "转接失败");
+        }
+      }).catch(err => {
+        this.transferLoading = false;
+      });
+    },
+
     endChat() {
-      this.$confirm('确定要结束当前会话吗?', '提示', {
+      // 【修改】不再依赖 activeSessions，直接取属性
+      let cid = this.currentSession.conversationId;
+
+      if (!cid) {
+        this.$message.warning("当前没有正在进行的人工会话");
+        return;
+      }
+
+      this.$confirm('确定要结束本次服务吗?', '提示', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'warning'
       }).then(() => {
-        this.endPrivateChat();
-      }).catch(() => {});
-    },
-
-    // --- 以下保持原有逻辑 ---
-    triggerFileUpload() {
-      if (this.shouldDisable) return;
-      this.$refs.fileInput.click();
-    },
-    handleFileChange(e) {
-      let file = e.target.files[0];
-      if (!file) return;
-      let type = 3;
-      if (file.type.match(/image.*/)) {
-        type = 2;
-      }
-      let formData = new FormData();
-      formData.append('file', file);
-      formData.append('module', 'chat');
-
-      reqOssFileUpload(formData).then(resp => {
-        if (resp && resp.status === 200) {
-          let fileUrl = resp.obj;
-          this.sendWsMessage(fileUrl, type);
-        } else {
-          this.$message.error(resp.msg || '文件上传失败');
-        }
-        this.$refs.fileInput.value = '';
+        let isActive = 3;
+        reqRequestClosePrivateChat(this.currentSession.conversationId,  isActive);
+        // 注意：后续状态清理会在 store 的 actions.endPrivateChat 里自动完成
       });
     },
-    sendWsMessage(content, type) {
-      let msgObj = {
-        to: this.currentSession.username,
-        content: content,
-        messageTypeId: type
-      };
-      if (this.currentSession.username === '群聊') {
-        // 群聊
-      } else {
-        this.$store.state.stomp.send('/app/ws/chat', {}, JSON.stringify(msgObj));
-        this.$store.commit('addMessage', {
-          content: content,
-          createTime: new Date(),
-          to: this.currentSession.username,
-          notSelf: false,
-          messageTypeId: type
-        });
-      }
-    },
-    sendTextMessage(e) {
-      if (this.shouldDisable) return;
-      if (e && e.type === 'keyup' && !e.ctrlKey && !e.metaKey) {}
-      if (!this.content || this.content.trim().length === 0) return;
-      this.sendWsMessage(this.content, 1);
-      this.content = '';
-      this.showEmoji = false;
-    },
-    toggleEmoji() { this.showEmoji = !this.showEmoji; },
-    selectEmoji(char) { this.content += char; }
-  },
-  mounted() {
-    document.addEventListener('click', (e) => {
-      if (this.$el && !this.$el.contains(e.target)) this.showEmoji = false;
-    })
   }
 }
 </script>
 
+<style lang="scss">
+/* 表情弹窗样式 */
+.emoji-popper {
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 8px !important;
+  .emoji-list {
+    display: flex;
+    flex-wrap: wrap;
+    max-height: 250px;
+    overflow-y: auto;
+    gap: 4px; /* 表情间距 */
+  }
+  .emoji-item {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 20px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    &:hover {
+      background-color: #f0f2f5;
+    }
+  }
+}
+</style>
+<style>
+.centered-dialog {
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-height: 90vh;
+  max-width: 100vw;
+  overflow: hidden;
+}
+
+.centered-dialog .el-dialog__body {
+  overflow-y: auto;
+  max-height: calc(90vh - 120px);
+}
+</style>
 <style lang="scss" scoped>
 #usertext {
   width: 100%;
   height: 100%;
-  border-top: 1px solid #d6d6d6;
+  /* 移除边框，改用轻微的顶部阴影分隔 */
+  box-shadow: 0 -1px 0 rgba(0,0,0,0.06);
   background-color: #fff;
   display: flex;
   flex-direction: column;
   position: relative;
+  transition: all 0.3s;
 
-  /* 【新增】右上角按钮样式 */
-  .top-right-actions {
-    position: absolute;
-    top: 15px;   /* 稍微留点空隙，和 toolbar 对齐 */
-    right: 15px;
-    z-index: 30; /* 【关键】必须比 .mask-layer (20) 大，否则遮罩层出来后按钮就点不了了 */
+  /* 禁用状态外观 */
+  &.is-disabled {
+    background-color: #f7f8fa;
+    .chat-toolbar, .chat-footer {
+      background-color: #f7f8fa;
+    }
+    .tool-btn {
+      cursor: not-allowed;
+      opacity: 0.6;
+      &:hover { background-color: transparent; }
+    }
   }
 
-  /* 调整遮罩层，保持原样即可 */
-  .mask-layer {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background-color: rgba(255, 255, 255, 0.6);
-    z-index: 20; /* 这里的 z-index 比按钮小 */
-    display: flex; align-items: center; justify-content: center;
-    cursor: not-allowed;
+  .input-mode {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }
 
-  .mask-text { background-color: #f56c6c; color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
-  .btn-disabled { background-color: #e0e0e0 !important; color: #999 !important; border-color: #dcdfe6 !important; cursor: not-allowed !important; }
-
-  .icon {
-    fill: #666;
-    &:hover { fill: #b1e3ff; }
+  /* --- 工具栏优化 --- */
+  .chat-toolbar {
+    height: 44px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    /*border-bottom: 1px solid #f0f0f0;  分割线*/
   }
 
-  .chat-toolbar { height: 40px; padding: 5px 15px; display: flex; align-items: center; position: relative; }
-  .tool-item { margin-right: 15px; cursor: pointer; display: flex; align-items: center; }
-  .emoji-box { position: absolute; bottom: 40px; left: 10px; width: 300px; height: 200px; background: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.2); border-radius: 4px; padding: 10px; overflow-y: auto; z-index: 100; }
-  .emoji-list { display: flex; flex-wrap: wrap; }
-  .emoji-item { padding: 5px; cursor: pointer; font-size: 20px; &:hover { background-color: #f0f0f0; border-radius: 4px; } }
+  .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* 图标之间的间距 */
+  }
 
-  .chat-textarea { flex: 1; width: 100%; border: none; outline: none; resize: none; padding: 0 15px; font-size: 14px; font-family: inherit; background: transparent; }
-  .chat-footer { height: 40px; display: flex; justify-content: flex-end; align-items: center; padding-right: 20px; background-color: #fff; transform: translateY(-10px);}
-  .send-btn { background-color: #f5f5f5; color: #606060; border: 1px solid #e5e5e5; padding: 5px 20px; cursor: pointer; border-radius: 4px; font-size: 14px; transition: all 0.2s; &:hover { background-color: #3988d3; color: white; border-color: #129611; } }
+  /* 上传组件 wrapper */
+  .upload-wrapper {
+    display: flex;
+    align-items: center;
+  }
+
+  /* 核心：美化后的图标按钮 */
+  .tool-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #606266;
+
+    &:hover {
+      background-color: #f0f2f5; /* 悬浮时的浅灰背景 */
+      color: #333;
+    }
+
+    /* 图标尺寸统一 */
+    .icon {
+      font-size: 20px;
+    }
+
+    /* 专门修正 SVG 图标的颜色 */
+    .emoji-icon {
+      fill: currentColor;
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  /* 结束按钮 */
+  .end-btn {
+    margin-left: auto;
+    padding: 6px 12px;
+  }
+  .action-btn-group {
+    margin-left: auto; /* 将按钮推到最右侧 */
+    display: flex;
+    align-items: center;
+  }
+  .transfer-content {
+    padding: 0 20px;
+  }
+  .transfer-tip {
+    display: flex;
+    align-items: center;
+    background: #fdf6ec;
+    color: #e6a23c !important;
+    padding: 8px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-bottom: 15px;
+
+    i {
+      margin-right: 5px;
+      font-size: 14px;
+    }
+  }
+  .label {
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: #606266;
+  }
+  /* --- 文本输入区 --- */
+  .textarea-wrapper {
+    flex: 1;
+    padding: 2px 16px 0 16px;
+  }
+
+  .chat-textarea {
+    width: 100%;
+    height: 100%;
+    border: none;
+    outline: none;
+    resize: none;
+    font-size: 14px;
+    font-family: inherit;
+    background: transparent;
+    color: #333;
+    line-height: 1.6;
+
+    &::placeholder {
+      color: #999;
+      font-size: 13px;
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+    }
+  }
+
+  /* --- 底部区域 --- */
+  .chat-footer {
+    height: 48px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0 16px;
+  }
+
+  .tip-text {
+    font-size: 12px;
+    color: #999;
+    margin-right: 12px;
+    user-select: none;
+  }
+
+  .send-btn {
+    padding: 8px 24px;
+    font-size: 14px;
+    border-radius: 4px; /* 稍微圆一点 */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+
+    &.is-disabled {
+      background-color: #e4e7ed;
+      border-color: #e4e7ed;
+      color: #c0c4cc;
+      box-shadow: none;
+    }
+  }
 }
 </style>

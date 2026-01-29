@@ -6,27 +6,34 @@ export const baseUrl = process.env.VUE_APP_API_BASE_URL || 'http://120.55.5.60:9
 
 axios.defaults.baseURL = baseUrl; // 设置 axios 默认前缀
 axios.defaults.withCredentials = true;
+let isReloginMessageShown = false;
+
+// 【新增】统一的重置状态与跳转方法
+const resetLoginState = () => {
+    // 1. 清除所有相关的缓存
+    window.sessionStorage.removeItem("user");
+    window.sessionStorage.removeItem("admin");
+    window.sessionStorage.removeItem("state");
+    window.localStorage.removeItem("user");
+    window.localStorage.removeItem("admin");
+
+    // 2. 强制刷新页面跳转 (比 router.replace 更彻底，能清空内存中的 Vuex)
+    window.location.href = '/';
+};
+
 // 请求拦截器
 axios.interceptors.request.use(config => {
-    // 根据请求路径判断是【管理员】还是【普通用户】
     if (config.url.startsWith('/admin')) {
-        // --- 管理员请求处理 ---
         let adminStr = window.sessionStorage.getItem("admin");
         if (adminStr) {
             let admin = JSON.parse(adminStr);
-            if (admin.token) {
-                // 对应 JwtTokenAdminInterceptor.java 的校验逻辑
-                config.headers['Authorization'] = 'Bearer ' + admin.token;
-            }
+            if (admin.token) config.headers['Authorization'] = 'Bearer ' + admin.token;
         }
     } else {
-        // --- 普通用户请求处理 ---
         let userStr = window.sessionStorage.getItem("user");
         if (userStr) {
             let user = JSON.parse(userStr);
-            if (user.token) {
-                config.headers['Authorization'] = 'Bearer ' + user.token;
-            }
+            if (user.token) config.headers['Authorization'] = 'Bearer ' + user.token;
         }
     }
     return config;
@@ -34,41 +41,31 @@ axios.interceptors.request.use(config => {
     console.log(error);
 });
 
-
-// 响应拦截器 【核心修改部分】
+// 响应拦截器
 axios.interceptors.response.use(success => {
     if (success.status && success.status === 200) {
-
-        // 【新增关键逻辑】判断是否需要“静音”（不弹窗）
-        // 如果是检查用户名或昵称的接口，则不进行全局 Message 提示
         const requestUrl = success.config.url;
         const isSilentRequest = requestUrl.includes('/checkUsername') || requestUrl.includes('/checkNickname');
 
-        // --- 针对业务逻辑上的 Token 过期 (Status 401) ---
+        // --- 业务逻辑 Token 过期 (Status 401) ---
         if (success.data.status === 401) {
-            Message.error({message: success.data.msg || '登录已过期，请重新登录'});
-            window.sessionStorage.removeItem("user");
-            window.sessionStorage.removeItem("admin");
-            window.localStorage.removeItem("user");
-            window.localStorage.removeItem("admin");
-            router.replace('/');
+            // 【修复】加锁，只弹一次窗，只执行一次清理
+            if (!isReloginMessageShown) {
+                isReloginMessageShown = true;
+                Message.error({message: success.data.msg || '登录已过期，请重新登录'});
+                resetLoginState();
+            }
             return;
         }
 
-        // 其他业务错误 (500, 403)
         if (success.data.status === 500 || success.data.status === 403) {
-            // 只有非静音请求才弹窗
             if (!isSilentRequest) {
                 Message.error({message: success.data.msg || '操作失败'});
-                return; // 拦截，不返回数据给组件（组件收到 undefined）
+                return;
             }
-            // 如果是静音请求（验证），我们不弹窗，但允许程序继续执行，
-            // 这样组件就能收到 success.data，从而在回调中判断 status != 200 并执行 callback(new Error)
         }
 
-        // 操作成功
         if (success.data.msg) {
-            // 只有非静音请求才弹窗 (防止 "用户名可用" 这种提示弹出)
             if (!isSilentRequest) {
                 Message.success({message: success.data.msg});
             }
@@ -84,12 +81,12 @@ axios.interceptors.response.use(success => {
         } else if (status === 403) {
             Message.error({message: '权限不足，请联系管理员'});
         } else if (status === 401) {
-            Message.error({message: '认证失效，请重新登录'});
-            window.sessionStorage.removeItem("user");
-            window.sessionStorage.removeItem("admin");
-            window.localStorage.removeItem("user");
-            window.localStorage.removeItem("admin");
-            router.replace('/');
+            // 【修复】HTTP 401 错误也加锁处理
+            if (!isReloginMessageShown) {
+                isReloginMessageShown = true;
+                Message.error({message: '认证失效，请重新登录'});
+                resetLoginState();
+            }
         } else {
             if (error.response.data) {
                 const errorMsg = error.response.data.msg || error.response.data.message;
@@ -151,7 +148,7 @@ export const deleteRequest = (url, params) => {
 // 1. 登录与注册
 export const reqUserLogin = (params) => postRequest('/user/login', params);
 export const reqUserRegister = (params) => postRequest('/user/register', params);
-
+export const reqUserLogout = () => getRequest('/user/logout');
 // 验证相关
 export const reqVerifyCode = () => getRequest('/verifyCode');
 export const reqGetMailVerifyCode = () => getRequest('/mailVerifyCode');
@@ -171,7 +168,8 @@ export const reqUpdateUserStatus = (params) => putRequest(`/admin/changeLockedSt
 export const reqDeleteUser = (id) => deleteRequest(`/admin/${id}`);
 export const reqDeleteUserByIds = (params) => deleteRequest('/admin/', params);
 
-
+export const reqChangeUserState = (stateId) => postRequest(`/user/supporter/changeUserState?stateId=${stateId}`);
+export const reqGetCard = () => getRequest(`/user/getCard`);
 // 5. 群聊消息管理
 export const reqGetGroupMsgLogs = (params) => getRequest('/admin/GroupMsgContent/getAllGroupMsgContentByPage', params);
 export const reqDeleteGroupMsgById = (id) => deleteRequest(`/admin/GroupMsgContent/deleteGroupMsgContentById/${id}`);
@@ -179,18 +177,38 @@ export const reqDeleteGroupMsgByIds = (params) => deleteRequest('/admin/GroupMsg
 
 // 6. 聊天相关
 export const reqGetRecentConversation = () => getRequest('/user/chat/getRecentConversation');
-export const reqGetChatUsers = () => getRequest('/user/chat/getUsersWithoutCurrentUser');
+export const reqGetSupportServiceCategories = (domainId) => getRequest('/user/chat/getSupportServiceCategories', {domainId});
+export const reqGetServiceDomains = () => getRequest('/user/chat/getServiceDomains');
 // 注意：后端使用 @RequestParam，为了稳妥，我们这里直接拼接到URL上，或者使用 params 对象
-export const reqStartPrivateChat = (toId) => postRequest(`/user/private/start?toId=${toId}`);
-export const reqClosePrivateChat = (conversationId) => postRequest(`/user/private/close?conversationId=${conversationId}`);
-export const reqGetPrivateChatHistory = (toId) => getRequest('/user/private/history', {toId});
-export const reqGetPrivateChatStatus = (toId) => getRequest('/user/private/status', {toId});
+export const reqClosePrivateChat = (conversationId,messageId) => postRequest(`/user/private/close?conversationId=${conversationId}&messageId=${messageId}`);
+export const reqSupporterGetHistoryMsg = (params) => getRequest('/user/private/supporterGetHistoryMsg', params);
+export const reqGetHistoryMsg = (params) => getRequest('/user/private/getHistoryMsg', params);
+// export const reqGetPrivateChatStatus = (toId) => getRequest('/user/private/status', {toId});
 export const reqGetAllActiveSessions = () => getRequest('/user/private/active_sessions');
 // 获取发送了未读消息的用户ID列表 (用于登录初始化红点)
 export const reqGetUnreadSenders = () => getRequest('/user/private/getUnreadSenders');
 // 更新已读了某人的消息
 export const reqUpdateMsgRead = (fromId) => postRequest(`/user/private/updateMsgStateToRead?fromId=${fromId}`);
-
+// 开启人工服务会话
+export const reqStartPrivateChat = (domainId, serviceId) => postRequest(`/user/private/start?domainId=${domainId}&serviceId=${serviceId}`);
+// 客服请求结束会话（发起确认申请，状态转为3）
+export const reqRequestClosePrivateChat = (conversationId,isActive) => postRequest(`/user/private/requestClose?conversationId=${conversationId}&isActive=${isActive}`);
+// 用户点击“未解决”（恢复会话，状态转为1）
+export const reqConfirmUnsolved = (conversationId,messageId) => postRequest(`/user/private/confirmUnsolved?conversationId=${conversationId}&messageId=${messageId}`);
+export const reqUpdateServiceMsgRead = (domainId, staffId) => {
+    let url = `/user/private/updateServiceMsgRead?domainId=${domainId}`;
+    if (staffId) {
+        url += `&staffId=${staffId}`;
+    }
+    return postRequest(url);
+};
+// 转接支撑人员
+export const reqTransferChat = (conversationId, newServiceId, domainId) => {
+    return postRequest(`/user/private/transfer?conversationId=${conversationId}&newServiceId=${newServiceId}&domainId=${domainId}`);
+}
+export const reqSubmitScore = (conversationId, score) => {
+    return postRequest(`/user/private/submitScore?conversationId=${conversationId}&score=${score}`);
+}
 // 7. 文件上传
 export const reqUploadFile = (params) => postRequest('/user/file', params);
 export const reqOssFileUpload = (params) => postRequest('/user/ossFileUpload', params);

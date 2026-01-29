@@ -5,186 +5,103 @@
     </div>
 
     <div v-else class="list-header">
-      <template v-if="!isBatchMode">
         <p class="section-title">会话列表</p>
-        <el-tooltip content="批量管理" placement="right"
-                    v-if="users.length > 0 && currentUser && currentUser.userTypeId === 1">
-          <i class="el-icon-s-operation manage-btn" @click="enterBatchMode"></i>
-        </el-tooltip>
-      </template>
-
-      <template v-else>
-        <div class="batch-toolbar">
-          <el-checkbox
-              :indeterminate="isIndeterminate"
-              v-model="checkAll"
-              @change="handleCheckAllChange"
-              class="check-all-box"
-          >全选
-          </el-checkbox>
-
-          <div class="batch-btns">
-            <el-button
-                type="text"
-                size="mini"
-                class="danger-text"
-                :disabled="selectedUsers.length === 0"
-                @click="confirmBatchDelete"
-            >
-              删除({{ selectedUsers.length }})
-            </el-button>
-            <el-button type="text" size="mini" @click="exitBatchMode">完成</el-button>
-          </div>
-        </div>
-      </template>
     </div>
+
 
     <ul v-if="sortedUserList && sortedUserList.length" class="user-ul">
       <li
           v-for="item in sortedUserList"
-          :class="{ active: currentSession && item.username === currentSession.username }"
-          @click="changeCurrentSession(item)"
           :key="item.id"
+          class="user-item"
+          :class="{ active: currentSession && currentSession.username === item.username }"
+          @click="changeCurrentSession(item)"
       >
-        <div v-if="isBatchMode" class="checkbox-wrapper" @click.stop>
-          <el-checkbox
-              :label="item.username"
-              v-model="selectedUsers"
-              class="simple-checkbox"
-          ></el-checkbox>
-        </div>
 
-        <div class="avatar-wrapper">
+        <div class="avatar-wrapper" :class="{ 'offline': currentUser.userTypeId === 1 && item.userStateId === 0 }">
           <img class="avatar" :src="item.userProfile" :alt="item.nickname">
-          <span class="status-dot" :class="item.userStateId === 1 ? 'online' : 'offline'"></span>
+          <span v-if="currentUser.userTypeId === 1" class="status-dot" :class="{ 'online': item.userStateId === 1 }"></span>
         </div>
 
         <div class="text-wrapper">
-          <p class="name">
-            {{ item.nickname }}
-            <span v-if="item.userTypeId === 1" class="support-chat-title-label">支撑人员</span>
+          <p class="name">{{ item.nickname }}</p>
+
+          <p v-if="currentUser.userTypeId === 1" class="status-text" :class="{ 'online-text': item.userStateId === 1 }">
+            {{  item.userStateId === 1 ? '在线' : '离线' }}
           </p>
-          <span
-              class="status-text"
-              :class="{ 'online-text': item.userStateId === 1 }"
-          >
-            {{ item.userStateId === 1 ? '[在线]' : '[离线]' }}
-          </span>
         </div>
 
-        <div class="badge-wrapper"
-             v-if="!isBatchMode && currentUser && isDot[currentUser.username + '#' + item.username]">
-          <span class="new-msg-badge"></span>
+        <div class="badge-wrapper">
+          <span class="new-msg-badge" v-if="isDot[currentUser.username + '#' + item.username]"></span>
         </div>
       </li>
     </ul>
 
     <div v-else class="empty-list">
-      暂无活跃会话
+      暂无会话
     </div>
   </div>
 </template>
 
 <script>
 import {mapState} from 'vuex'
-import {MessageBox} from 'element-ui';
 
 export default {
   name: 'list',
   data() {
     return {
-      isBatchMode: false,
-      checkAll: false,
-      selectedUsers: [],
     }
   },
   computed: {
-    ...mapState([
-      'users',
-      'currentSession',
-      'isDot',
-      'currentUser',
-      'filterKey'
-    ]),
-    sortedUserList() {
-      if (!this.users) return [];
-      let list = [...this.users];
+    ...mapState(['sessions', 'users', 'currentSession', 'isDot', 'currentUser', 'filterKey']),
 
-      // 搜索过滤
+    sortedUserList() {
+      // 1. 搜索过滤
+      let list = this.users;
       if (this.filterKey) {
-        list = list.filter(user =>
-            (user.nickname && user.nickname.includes(this.filterKey)) ||
-            (user.username && user.username.includes(this.filterKey))
-        );
+        list = list.filter(user => user.nickname.includes(this.filterKey));
       }
 
-      // 排序
-      list.sort((a, b) => {
-        const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
-        const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
-        return timeB - timeA;
+      // 2. 排序
+      return list.slice().sort((a, b) => {
+        // 如果是普通用户，优先展示服务域 (isReceptionist 为 true)
+        if (this.currentUser.userTypeId !== 1) {
+          if (a.isReceptionist && !b.isReceptionist) return -1;
+          if (!a.isReceptionist && b.isReceptionist) return 1;
+        }
+
+        // 规则B: 按最后一条消息时间降序
+        let keyA = this.currentUser.username + '#' + a.username;
+        let keyB = this.currentUser.username + '#' + b.username;
+        let msgsA = this.sessions[keyA];
+        let msgsB = this.sessions[keyB];
+
+        let timeA = (msgsA && msgsA.length > 0) ? new Date(msgsA[msgsA.length - 1].date).getTime() : 0;
+        let timeB = (msgsB && msgsB.length > 0) ? new Date(msgsB[msgsB.length - 1].date).getTime() : 0;
+
+        if (timeA > 0 || timeB > 0) {
+          return timeB - timeA;
+        }
+
+        // 规则C: 在线的排在前面
+        return b.userStateId - a.userStateId;
       });
-      return list;
     },
-    isIndeterminate() {
-      return this.selectedUsers.length > 0 && this.selectedUsers.length < this.sortedUserList.length;
-    }
+
   },
-  watch: {
-    selectedUsers(val) {
-      this.checkAll = val.length === this.sortedUserList.length && this.sortedUserList.length > 0;
-    }
-  },
+  // ... methods 保持不变 ...
   methods: {
     changeCurrentSession(currentSession) {
-      // 批量模式：点击行 = 选中/取消
       if (this.isBatchMode) {
-        const index = this.selectedUsers.indexOf(currentSession.username);
-        if (index > -1) {
-          this.selectedUsers.splice(index, 1);
-        } else {
-          this.selectedUsers.push(currentSession.username);
-        }
+        currentSession.checked = !currentSession.checked;
+        this.handleItemCheckChange();
         return;
       }
-      // 正常模式：切换聊天
       this.$store.commit('changeCurrentSession', currentSession);
     },
 
-    enterBatchMode() {
-      this.isBatchMode = true;
-      this.selectedUsers = [];
-      this.checkAll = false;
-    },
+    handleItemCheckChange() { let checkedCount = this.users.filter(u => u.checked).length; this.checkAll = checkedCount === this.users.length && this.users.length > 0; this.isIndeterminate = checkedCount > 0 && checkedCount < this.users.length; },
 
-    exitBatchMode() {
-      this.isBatchMode = false;
-      this.selectedUsers = [];
-    },
-
-    handleCheckAllChange(val) {
-      this.selectedUsers = val ? this.sortedUserList.map(u => u.username) : [];
-    },
-
-    confirmBatchDelete() {
-      if (this.selectedUsers.length === 0) return;
-
-      MessageBox.confirm(
-          `确定要移除这 ${this.selectedUsers.length} 个会话吗？\n(这不会删除历史记录，新消息到来时会自动恢复)`,
-          '批量移除',
-          {
-            confirmButtonText: '确定移除',
-            cancelButtonText: '取消',
-            type: 'warning',
-            center: true
-          }
-      ).then(() => {
-        this.$store.commit('BATCH_DELETE_SESSIONS', this.selectedUsers);
-        this.$message.success('已移除');
-        this.exitBatchMode();
-      }).catch(() => {
-      });
-    }
   }
 }
 </script>
@@ -216,34 +133,7 @@ export default {
   font-weight: 600;
 }
 
-.manage-btn {
-  font-size: 16px;
-  color: #909399;
-  cursor: pointer;
-  padding: 5px;
-  transition: color 0.3s;
-}
 
-.manage-btn:hover {
-  color: #409EFF;
-}
-
-/* 批量工具栏 */
-.batch-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  padding-left: 5px;
-}
-
-.danger-text {
-  color: #F56C6C;
-}
-
-.danger-text:hover {
-  color: #f78989;
-}
 
 /* 3. 列表滚动区域 */
 .user-ul {
@@ -381,18 +271,6 @@ li.active .name {
   box-shadow: 0 2px 4px rgba(245, 108, 108, 0.4);
   border: 2px solid #fff;
   animation: pulse 2s infinite;
-}
-
-.support-chat-title-label {
-  font-size: 10px;
-  color: #909399;
-  background-color: #f4f4f5;
-  border: 1px solid #e9e9eb;
-  border-radius: 4px;
-  padding: 1px 5px;
-  margin-left: 6px;
-  font-weight: normal;
-  vertical-align: middle;
 }
 
 .empty-list {

@@ -1,27 +1,42 @@
 <template>
   <div id="card">
-    <!-- 用户信息区 -->
     <div class="user-info-box">
       <div class="avatar-container">
-        <img class="avatar" :src="user.userProfile" :alt="user.nickname">
-        <!-- 状态圆点 -->
-        <span class="status-dot" :class="isOnline ? 'status-online' : 'status-offline'"></span>
+        <img v-if="user.userProfile" class="avatar" :src="user.userProfile" :alt="user.nickname">
+        <span class="status-dot" :class="statusClass"></span>
       </div>
 
       <div class="meta">
-        <p class="name">{{user.nickname}}</p>
-        <span class="role-tag" :class="isOnline ? 'text-online' : 'text-offline'">
-           {{ isOnline ? '在线' : '离线' }}
-         </span>
+        <p class="name">{{this.user.nickName}}</p>
+
+        <el-dropdown
+            v-if="user.userTypeId === 1"
+            trigger="click"
+            @command="handleStatusCommand">
+          <span class="role-tag status-cursor" :class="textClass">
+            {{ statusText }}
+            <i class="el-icon-caret-bottom" style="font-size: 12px; margin-left: 2px;"></i>
+          </span>
+          <el-dropdown-menu slot="dropdown">
+            <el-dropdown-item :command="1">
+              <span class="dot-inline status-online"></span> 在线
+            </el-dropdown-item>
+            <el-dropdown-item :command="3">
+              <span class="dot-inline status-busy"></span> 暂时离开
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </el-dropdown>
+
+        <span v-else class="role-tag" :class="textClass">
+          {{ statusText }}
+        </span>
       </div>
 
-      <!-- 新增：退出登录按钮 (靠右显示) -->
       <div class="logout-btn" @click="logout" title="退出登录">
         <i class="el-icon-switch-button"></i>
       </div>
     </div>
 
-    <!-- 搜索框 -->
     <div class="search-bar">
       <i class="el-icon-search"></i>
       <input
@@ -34,40 +49,75 @@
 </template>
 
 <script>
+import { reqUserLogout, reqChangeUserState, reqGetCard } from "@/utils/api";
+
 export default {
   name: 'card',
   data () {
     return {
-      user: JSON.parse(window.sessionStorage.getItem('user')),
-      isOnline: true
+      // 1. 【修改】初始化为空对象，不再从 sessionStorage 获取
+      user: {}
     }
   },
+  computed: {
+    // 2. 【修复】所有 this.userStateId 必须改成 this.user.userStateId
+    statusClass() {
+      if (this.user.userStateId === 1) return 'status-online';
+      if (this.user.userStateId === 3) return 'status-busy';
+      return 'status-offline';
+    },
+    textClass() {
+      if (this.user.userStateId === 1) return 'text-online';
+      if (this.user.userStateId === 3) return 'text-busy';
+      return 'text-offline';
+    },
+    statusText() {
+      if (this.user.userStateId === 1) return '在线';
+      if (this.user.userStateId === 3) return '暂时离开';
+      return '离线';
+    }
+  },
+  mounted() {
+    this.initUserCard();
+  },
   methods: {
+    handleStatusCommand(command) {
+      // 【修复】引用路径修正
+      if (this.user.userStateId === command) return;
+
+      reqChangeUserState(command).then(resp => {
+        if (resp && resp.status === 200) {
+          // 更新当前视图数据
+          this.user.userStateId = command;
+
+          this.$message.success("状态更新成功");
+
+          // 如果您希望刷新页面后还能保持这个状态，
+          // 虽然初始化不读 session，但建议还是存一下，或者完全依赖后端（已实现）
+        }
+      });
+    },
+    initUserCard() {
+      reqGetCard().then(resp => {
+        if (resp) {
+          // 3. 【确认】后端返回的数据直接赋值给 user
+          // resp 结构是 User 对象，包含 userStateId, nickname, userProfile 等
+          this.user = resp.obj;
+          console.log("卡片数据已同步，当前状态ID:", this.user.userStateId);
+        }
+      })
+    },
     logout() {
-      this.$confirm('确定要退出登录吗?', '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }).then(() => {
-        // 1. 断开 WebSocket 连接
-        this.$store.dispatch('disconnect');
-        // 2. 重置 Vuex 中的内存数据
-        this.$store.commit('RESET_STATE');
-
-        // 3. 清除 sessionStorage 中的持久化缓存
-        window.sessionStorage.removeItem("state");
-
-        // 4. 清除 SessionStorage 中的用户信息
-        window.sessionStorage.removeItem("user");
-        window.localStorage.removeItem('user');
-
-        // 5. 跳转回登录页面
-        this.$router.replace('/');
-
-        // 提示消息
-        this.$message.success('已安全退出');
-      }).catch(() => {
-        // 取消操作，不做任何事
+      reqUserLogout().then(resp => {
+        if (resp) {
+          window.sessionStorage.removeItem("user");
+          window.sessionStorage.removeItem("state");
+          window.localStorage.removeItem("user");
+          if (this.$store.state.stomp) {
+            this.$store.state.stomp.disconnect();
+          }
+          this.$router.replace("/");
+        }
       });
     }
   }
@@ -110,9 +160,9 @@ export default {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid #dcdfe6; /* 边框加粗到2px，颜色加深 */
-  box-sizing: border-box; /* 确保边框算在宽高内 */
-  background-color: #fff; /* 防止透明头像背景透色 */
+  border: 2px solid #dcdfe6;
+  box-sizing: border-box;
+  background-color: #fff;
 }
 
 .status-dot {
@@ -125,8 +175,19 @@ export default {
   border: 2px solid #ffffff;
 }
 
-.status-online { background-color: #10b981; }
-.status-offline { background-color: #ef4444; }
+/* 状态颜色定义 */
+.status-online { background-color: #10b981; } /* 绿色 */
+.status-busy { background-color: #e6a23c; }   /* 黄色 (Element Warning Color) */
+.status-offline { background-color: #ef4444; } /* 红色 */
+
+/* 下拉菜单中的小圆点 */
+.dot-inline {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 5px;
+}
 
 .meta {
   display: flex;
@@ -139,7 +200,6 @@ export default {
   color: #1f2937;
   margin: 0;
   margin-bottom: 2px;
-  /* 限制名字长度，防止挤压按钮 */
   max-width: 100px;
   white-space: nowrap;
   overflow: hidden;
@@ -149,14 +209,31 @@ export default {
 .role-tag {
   font-size: 12px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+}
+
+/* 增加鼠标手势，提示可点击 */
+.status-cursor {
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  margin-left: -4px; /* 微调对齐 */
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.status-cursor:hover {
+  background-color: #f3f4f6;
 }
 
 .text-online { color: #10b981; }
+.text-busy { color: #e6a23c; }
 .text-offline { color: #ef4444; }
 
 /* 退出按钮样式 */
 .logout-btn {
-  margin-left: auto; /* 自动靠右 */
+  margin-left: auto;
   width: 32px;
   height: 32px;
   display: flex;
@@ -169,8 +246,8 @@ export default {
 }
 
 .logout-btn:hover {
-  background-color: #fee2e2; /* 浅红背景 */
-  color: #ef4444; /* 红色图标 */
+  background-color: #fee2e2;
+  color: #ef4444;
 }
 
 .logout-btn i {

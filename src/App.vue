@@ -7,6 +7,20 @@
 <script>
 export default {
   name: 'App',
+  created() {
+    window.addEventListener('beforeunload', () => {
+      // 1. 检查是否存在登录标记
+      // 如果 api.js 里的 resetLoginState 执行过，这里的 user/admin 肯定已经被 removeItem 删掉了
+      let user = window.sessionStorage.getItem("user");
+      let admin = window.sessionStorage.getItem("admin");
+
+      // 2. 只有当用户确实处于“登录中”状态时，才保存 Vuex 数据
+      // 如果 user 和 admin 都没了，说明是异常退出或注销，千万别保存 state，让它自然销毁
+      if (user || admin) {
+        sessionStorage.setItem('state', JSON.stringify(this.$store.state));
+      }
+    });
+  },
   data() {
     return {
       // 用于记录滑动状态
@@ -134,21 +148,7 @@ html, body {
   background-color: #e9f6ff !important; /* 可选：悬停时微微变色 */
 }
 
-/* 强制覆盖 Element UI 的动态定位计算
-  让所有聊天弹窗都叠在右上角的同一个位置
-*/
-.el-notification.chat-notification {
-  /* 强制固定顶部距离，不再自动往下排 */
-  top: 60px !important;
-  /* 固定右侧距离 */
-  right: 15px !important;
-  /* 增加层级，保证在最上层 */
-  z-index: 2000 !important;
-  /* 加上阴影，让堆叠感更强，看起来像一叠卡片 */
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
-  /* 稍微加一点透明度，让底下的能隐约透出来一点点（可选） */
-  opacity: 0.95;
-}
+
 
 /* 可选优化：让鼠标悬停时，当前的弹窗稍微往前浮动一下
   提升交互感
@@ -194,5 +194,22 @@ html, body {
     /* 如果觉得60px还是遮挡，可以在这里单独加高 */
     top: 70px !important;
   }
+}
+
+.el-notification.chat-notification {
+  /* 1. 强制固定位置，覆盖 Element UI 计算出的 top 属性 */
+  top: 30px !important;
+  right: 20px !important;
+
+  /* 2. 增加层级感和阴影，看起来像扑克牌 */
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid #ebeef5;
+
+  /* 3. 添加过渡动画，让新消息出来时更自然 */
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+
+  /* 4. (可选) 如果希望堆叠时背景不透出下面的文字，确保背景色不透明 */
+  background-color: #fff;
+  opacity: 1;
 }
 </style>

@@ -2,94 +2,54 @@
   <div class="chat-title">
     <template v-if="currentSession">
       <div class="user-info-area">
-        <img
-            class="title-avatar"
-            :src="currentSession.userProfile"
-            onerror="this.src='http://39.108.169.57/group1/M00/00/00/J2ypOV7wJkyAAv1fAAANuXp4Wt8303.jpg'"
-            alt=""
-        >
+        <img class="title-avatar" :src="titleAvatar">
+
         <div class="text-area">
           <span class="name">
-            {{currentSession.nickname}}
-            <span v-if="currentSession.userTypeId === 1" class="support-chat-title-label">支撑人员</span>
+            {{ currentSession.nickname }}
           </span>
-          <div class="status-row">
+
+          <div class="status-row" v-if="!isVirtualService">
             <span class="status-dot" :class="currentSession.userStateId === 1 ? 'online' : 'offline'"></span>
-            <span>{{ currentSession.userStateId === 1 ? '在线' : '离线' }}</span>
+
+            <span :class="{ 'online-text': currentSession.userStateId === 1 }">
+    {{ currentSession.userStateId === 1 ? '在线' : '离线' }}
+  </span>
           </div>
         </div>
       </div>
-
-<!--      <div class="action-area">
-        <el-button
-            v-if="!isPrivateChatActive && currentSession.username !== '群聊'"
-            key="start-btn"
-            type="primary"
-            size="mini"
-            round
-            :disabled="user.userTypeId == null||user.userTypeId == 1"
-            :title="user.userTypeId == null || user.userTypeId == 1 ? '您无权主动开启会话' : '开启会话'"
-            @click="startChat"
-        >
-          开启会话
-        </el-button>
-
-        <el-button
-            v-else-if="isPrivateChatActive && currentSession.username !== '群聊'"
-            key="end-btn"
-            type="danger"
-            size="mini"
-            round
-            @click="endChat"
-        >
-          结束会话
-        </el-button>
-      </div>-->
     </template>
-
-    <div v-else class="title-placeholder">
-      未选择会话
-    </div>
+    <div v-else class="title-placeholder">未选择会话</div>
   </div>
 </template>
 
 <script>
-import {mapState, mapActions} from 'vuex'
+import {mapState} from 'vuex'
+// 引入本地默认头像
+import serviceAvatar from '@/assets/客服头像.png'
 
 export default {
   name: 'chattitle',
-  computed: {
-    ...mapState(['currentSession', 'isPrivateChatActive', 'currentUser']),
-
-    user() {
-      // 既然您确认逻辑是正确的，这里保持原样即可
-      return this.currentUser || JSON.parse(window.sessionStorage.getItem('user')) || {};
+  data() {
+    return {
+      serviceAvatar: serviceAvatar
     }
   },
-  methods: {
-    ...mapActions(['startPrivateChat', 'endPrivateChat']),
+  computed: {
+    ...mapState(['currentSession']),
 
-    startChat() {
-      // 保持您原本正确的逻辑
-      if (this.user.userTypeId == null||this.user.userTypeId == 1) {
-        this.$message.warning('您无权主动开启会话');
-        return;
-      }
-      this.startPrivateChat(this.currentSession).then(success => {
-        if (!success) {
-          this.$message.error('会话开启失败');
-        }
-      });
+    // 判断是否是虚拟服务
+    isVirtualService() {
+      return this.currentSession && this.currentSession.username && this.currentSession.username.startsWith('service_');
     },
 
-    endChat() {
-      this.$confirm('确定要结束当前会话吗?', '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }).then(() => {
-        this.endPrivateChat();
-      }).catch(() => {});
+    // 计算头像：如果是虚拟服务，永远只显示默认头像，不显示真实客服头像
+    titleAvatar() {
+      if (!this.currentSession) return '';
+      if (this.isVirtualService) {
+        return this.serviceAvatar;
+      }
+      return this.currentSession.userProfile;
     }
   }
 }
@@ -101,7 +61,7 @@ export default {
   height: 100%;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: center; /* 居中显示 */
   position: relative;
   padding: 0 20px;
   box-sizing: border-box;
@@ -109,45 +69,54 @@ export default {
   background-color: #fff;
 }
 
-.support-chat-title-label {
-  font-size: 10px;       /* 强制改小字体 */
-  color: #909399;        /* 灰色 */
-  background-color: #f4f4f5;
-  border: 1px solid #e9e9eb;
-  border-radius: 4px;
-  padding: 1px 5px;
-  margin-left: 8px;
-  font-weight: normal;   /* 【关键】强制去掉加粗，否则会继承 .name 的加粗 */
-  vertical-align: middle;
-  line-height: normal;   /* 防止行高异常 */
+.user-info-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
-
-.title-placeholder {
-  font-size: 14px;
-  color: #999;
-}
-
-.user-info-area { display: flex; align-items: center; gap: 10px; }
 
 .title-avatar {
-  width: 36px; height: 36px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid #eee;
 }
 
-.text-area { display: flex; flex-direction: column; align-items: flex-start; }
+.text-area {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
 
-.name { font-size: 16px; font-weight: 600; color: #333; }
+.name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
 
-.status-row { display: flex; align-items: center; font-size: 11px; color: #999; margin-top: 2px; }
+.status-row {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+}
 
-.status-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
 .online { background-color: #10b981; }
 .offline { background-color: #9ca3af; }
-
-.action-area {
-  position: absolute;
-  right: 20px;
+.online-text {
+  color: #10b981 !important;
+}
+.title-placeholder {
+  font-size: 14px;
+  color: #999;
 }
 </style>

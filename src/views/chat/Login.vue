@@ -287,6 +287,8 @@ export default {
   mounted() {
     // 页面加载时获取第一次验证码
     this.getVerifyCode();
+    this.$store.commit('RESET_STATE');
+    window.sessionStorage.removeItem("state");
   },
   methods:{
     getRandomAvatar() {
@@ -625,6 +627,8 @@ export default {
 .register-btn {
   width: 100%;
   color: #6b7280;
+  margin-left: 0 !important;
+  text-align: center;
 }
 
 .register-btn:hover {
