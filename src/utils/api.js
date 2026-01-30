@@ -2,7 +2,7 @@ import axios from 'axios';
 import {Message} from 'element-ui';
 import router from '../router';
 
-export const baseUrl = process.env.VUE_APP_API_BASE_URL || 'http://120.55.5.60:9090';
+export const baseUrl = process.env.VUE_APP_API_BASE_URL;
 
 axios.defaults.baseURL = baseUrl; // 设置 axios 默认前缀
 axios.defaults.withCredentials = true;
