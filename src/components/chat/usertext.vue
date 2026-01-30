@@ -353,7 +353,8 @@ export default {
         let isActive = 3;
         reqRequestClosePrivateChat(this.currentSession.conversationId,  isActive);
         // 注意：后续状态清理会在 store 的 actions.endPrivateChat 里自动完成
-      });
+      }).catch(() => {
+          });
     },
   }
 }

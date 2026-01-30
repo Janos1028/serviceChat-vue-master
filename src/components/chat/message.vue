@@ -312,7 +312,7 @@ export default {
     },
     // 用户点击：已解决
     handleSolved(entry) {
-      let conversationId = entry.conversationId || entry.conversation_id;
+      let conversationId = entry.conversationId;
       if (!conversationId) return;
 
       this.$confirm('确认问题已解决并结束本次服务吗?', '提示', {
@@ -336,21 +336,20 @@ export default {
       reqConfirmUnsolved(conversationId, entry.id ).then(resp => {
         if (resp && resp.status === 200) {
           this.$set(entry, 'state', 4); // 更新本地视图
+          console.log("这是entry：", entry);
         }
       });
     },
     getMessageKey(entry, index) {
-      // 1. 如果有数据库ID，直接用
-      if (entry.id) return entry.id;
-
-      // 2. 如果是评价卡片，使用 "rating_会话ID" 确保唯一且稳定
-      if (entry.messageTypeId === 6 && entry.conversationId) {
-        return 'rating_card_' + entry.conversationId;
+      if (entry.id) {
+        return 'msg_' + entry.id + '_' + index;
       }
 
-      // 3. 其他系统消息兜底 (组合键：会话ID_类型_索引)
-      let uniqueSuffix = (entry.conversationId || 'sys') + '_' + (entry.messageTypeId || 0) + '_' + index;
-      return 'sys_' + uniqueSuffix;
+      if (entry.messageTypeId === 6 && entry.conversationId) {
+        return 'rating_' + entry.conversationId + '_' + index;
+      }
+
+      return 'sys_' + index;
     },
     handleManualRate(score, conversationId, entry) {
       // 尝试多种方式获取 ID

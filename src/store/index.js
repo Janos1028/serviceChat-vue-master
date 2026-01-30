@@ -219,10 +219,9 @@ const store = new Vuex.Store({
           if (msg.state === 2) {
             Notification.warning({
               title: '服务确认',
-              message: '客服已发起服务结束申请，请您确认问题是否已解决。',
+              message: '【'+msg.fromNickname+'客服】已发起服务结束申请，请您确认问题是否已解决。',
               duration: 0, // 设置为 0 则不会自动关闭，需要用户手动点叉，避免漏看
               position: 'top-right',
-              offset: 50,
               zIndex: 9999,
             });
           }
@@ -236,16 +235,16 @@ const store = new Vuex.Store({
           if (msg.state === 3) {
             Notification.success({
               title: '服务结束',
-              message: '用户已确认问题解决，本次服务结束。',
+              message: '用户【'+msg.userNickName+'】已确认问题解决，本次服务结束。',
               duration: 5000 // 5秒后自动消失
             });
           }
 
           // 用户点击了“未解决”
           else if (msg.state === 4) {
-            Notification.error({ // 用红色报错样式，醒目
+            Notification.error({
               title: '用户反馈',
-              message: '用户反馈问题未解决，请继续跟进！',
+              message: '用户【'+msg.userNickName+'】反馈问题未解决，请继续跟进！',
               duration: 0, // 不自动关闭，直到客服看到
               zIndex: 9999,
             });
@@ -262,7 +261,7 @@ const store = new Vuex.Store({
           let notify = Notification.warning({
             title: '系统通知',
             message: msg.content,
-            duration: 0, // 6秒后自动关闭
+            duration: 0,
             zIndex: 9999,  // 确保在最上层
             onClick: () => {
               // 1. 根据消息中的 conversationId 查找对应的聊天对象
@@ -300,21 +299,25 @@ const store = new Vuex.Store({
       if (!state.sessions[key]) Vue.set(state.sessions, key, []);
       console.log("这是msg：", msg)
       if (msg.id) {
-        let existingMsg = state.sessions[key].find(m => m.id === msg.id);
-        if (existingMsg) {
-          console.log(" -> 发现已存在消息 (ID相同):", existingMsg);
+        // 使用 loose equality (==) 而不是 (===)，允许 '1897' == 1897
+        let existingMsg = state.sessions[key].find(m => m.id == msg.id);
 
-          // 只有当状态发生变化时才更新
-          if (msg.state !== undefined && existingMsg.state !== msg.state) {
-            console.log(` -> 【关键】状态更新! 从 ${existingMsg.state} 变为 ${msg.state}`);
-            Vue.set(existingMsg, 'state', msg.state);
-          } else {
-            console.log(` -> 状态未变或无状态字段 (Old: ${existingMsg.state}, New: ${msg.state})`);
+        if (existingMsg) {
+          // console.log(" -> 发现已存在消息，执行更新:", existingMsg.id);
+
+          // 更新内容
+          if (msg.content) existingMsg.content = msg.content;
+
+          // 更新状态 (确保类型安全)
+          if (msg.state !== undefined && msg.state !== null) {
+            existingMsg.state = Number(msg.state);
           }
-          return; // 更新完退出
+          if (msg.score !== undefined) {
+            existingMsg.score = Number(msg.score);
+          }
+
+          return; // ⛔️ 找到了就直接返回，千万不要往下执行 push！
         }
-      } else {
-        console.log(" -> 这是一个新消息 (无ID或ID未匹配到)");
       }
       state.sessions[key].push({
         id: msg.id, // 补上 ID
@@ -335,12 +338,13 @@ const store = new Vuex.Store({
     MARK_SESSION_READ(state, readerUsername) {
       let key = state.currentUser.username + "#" + readerUsername;
       if (state.sessions[key]) {
-        state.sessions[key].forEach(msg => { if (msg.self) msg.state = 1; });
+        state.sessions[key].forEach(msg => { if (msg.self && msg.messageTypeId !== 7) msg.state = 1; });
         Vue.set(state.sessions, key, [...state.sessions[key]]);
       }
     },
-    // 【修改】SET_HISTORY_MESSAGES (支持反转、保留、兜底生成)
+    // SET_HISTORY_MESSAGES (支持反转、保留、兜底生成)
     SET_HISTORY_MESSAGES(state, { username, messages, prepend = false }) {
+
       let key = state.currentUser.username + "#" + username;
 
       // 格式化后端返回的消息
@@ -896,8 +900,8 @@ const store = new Vuex.Store({
               let newUser = {
                 id: payload.fromId,
                 username: payload.fromUsername, // 之前可能写成了 fromUserUsername
-                nickname: payload.fromNickname || '新用户', // 之前可能写成了 fromUserNickname
-                userProfile: payload.fromProfile || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png',
+                nickname: payload.fromNickname , // 之前可能写成了 fromUserNickname
+                userProfile: payload.fromProfile ,
                 userTypeId: 0,
                 userStateId: 1,
                 lastMessageTime: new Date(),
