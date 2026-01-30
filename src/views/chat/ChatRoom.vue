@@ -21,6 +21,7 @@
       </div>
 
       <div class="main-container">
+
         <div class="top-header">
           <div
               class="toggle-btn main-toggle"
@@ -32,7 +33,7 @@
           </div>
           <chattitle></chattitle>
         </div>
-
+        <div v-if="currentSession" class="chat-main">
         <div class="message-area" id="chat-messages" @scroll="onScroll">
 
           <div v-if="isLoading" class="loading-tip">
@@ -57,7 +58,24 @@
         </div>
       </div>
 
+        <div v-else class="welcome-box">
+          <div class="bg-circle circle-1"></div>
+          <div class="bg-circle circle-2"></div>
+
+          <div class="welcome-content">
+            <div class="icon-wrapper">
+              <i class="el-icon-chat-line-round welcome-icon"></i>
+            </div>
+            <h2 class="greeting">{{ timeGreeting }}，{{ user.nickname }}</h2>
+            <p class="sub-text">👈 请从左侧列表选择聊天对象进行聊天</p>
+            <div class="date-badge">
+              {{ new Date().toLocaleDateString() }}
+            </div>
+          </div>
+        </div>
+
     </div>
+  </div>
   </div>
 </template>
 
@@ -81,12 +99,22 @@ export default {
       isLoadingMore: false,
       newMsgCount: 0,
       savedLastMsg: null,
+      user: JSON.parse(window.sessionStorage.getItem('user') || '{}'),
+
     }
   },
   computed: {
     ...mapState(['sessions', 'currentUser']),
     currentSession() {
       return this.$store.state.currentSession;
+    },
+    timeGreeting() {
+      const hour = new Date().getHours();
+      if (hour < 6) return '夜深了';
+      if (hour < 12) return '上午好';
+      if (hour < 14) return '中午好';
+      if (hour < 18) return '下午好';
+      return '晚上好';
     },
     // 【新增】实时获取当前会话的消息列表
     currentMsgList() {
@@ -357,5 +385,158 @@ export default {
   .sidebar-mask { display: block; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 900; }
   .sidebar-container { position: absolute; left: 0; top: 0; height: 100%; z-index: 1000; box-shadow: 2px 0 8px rgba(0,0,0,0.1); }
   .sidebar-closed { width: 0; transform: translateX(-100%); }
+}
+
+/* 主容器布局调整 */
+.main-container {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  position: relative;
+}
+
+/* 头部固定高度 */
+.top-header {
+  height: 60px; /*稍微加高一点，更大气*/
+  flex-shrink: 0;
+  border-bottom: 1px solid #e6e6e6;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  background: #fff;
+  z-index: 100;
+}
+
+/* 下方内容区域撑满剩余空间 */
+.content-area {
+  flex: 1;
+  overflow: hidden; /* 防止溢出 */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* A. 聊天主体 */
+.chat-main {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* B. 欢迎页美化 */
+.welcome-box {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* 去掉 linear-gradient，改为单一颜色 */
+  /* 推荐 #f5f7fa (极浅灰) 或者 #ffffff (纯白) */
+  background-color: #f5f7fa;
+  position: relative;
+  user-select: none;
+}
+
+/* 背景装饰圆球 (营造氛围感) */
+.bg-circle {
+  display: none;
+}
+.circle-1 {
+  width: 300px;
+  height: 300px;
+  background: #a1c4fd;
+  top: -50px;
+  right: -50px;
+  animation: float 6s ease-in-out infinite;
+}
+.circle-2 {
+  width: 200px;
+  height: 200px;
+  background: #c2e9fb;
+  bottom: -30px;
+  left: -30px;
+  animation: float 8s ease-in-out infinite reverse;
+}
+
+/* 内容层级要在背景之上 */
+.welcome-content {
+  z-index: 10;
+  text-align: center;
+  /* 移除了背景颜色、阴影、边框和模糊滤镜 */
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  margin-top: -150px;
+  /* 仅保留布局和动画 */
+  padding: 0;
+  animation: slideUp 0.5s ease-out;
+}
+
+.icon-wrapper {
+  margin-bottom: 20px;
+}
+
+.welcome-icon {
+  font-size: 80px;
+  /* 图标渐变色 */
+  background: linear-gradient(45deg, #409EFF, #36D1DC);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.greeting {
+  font-size: 25px; /*稍微加大一点*/
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 15px;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.05); /* 加一点点文字投影增加立体感 */
+}
+
+.sub-text {
+  font-size: 16px;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.action-text {
+  font-size: 14px;
+  color: #909399;
+  margin-top: 20px;
+}
+
+.date-badge {
+  margin-top: 10px;
+  display: inline-block;
+  font-size: 14px;
+  color: #909399;
+  font-weight: 500;
+  background: none; /* 去掉背景 */
+  letter-spacing: 1px;
+}
+
+/* 动画定义 */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(20px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 侧边栏按钮位置微调 */
+.toggle-btn {
+  margin-right: 15px; /* 给标题留点空隙 */
+}
+.main-toggle {
+  position: static; /* 取消之前的绝对定位，因为现在在 flex 容器里了 */
+  transform: none;
 }
 </style>
