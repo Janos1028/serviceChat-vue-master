@@ -116,6 +116,55 @@
           </el-radio-group>
         </el-form-item>
 
+        <template v-if="registerForm.userTypeId === 1">
+
+          <el-form-item
+              label="所属服务域"
+              prop="serviceDomainId"
+              class="user-type-item"
+              :rules="[{ required: true, message: '请选择服务域', trigger: 'change' }]"
+          >
+            <el-select
+                v-model="registerForm.serviceDomainId"
+                class="custom-register-select"
+                placeholder="请选择服务域"
+                style="width: 100%"
+                @change="handleDomainChange"
+            >
+              <el-option
+                  v-for="item in serviceDomains"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id">
+              </el-option>
+            </el-select>
+          </el-form-item>
+
+          <el-form-item
+              label="支撑服务类型"
+              prop="serviceIds"
+              class="user-type-item"
+              :rules="[{ required: true, message: '请选择服务类型', trigger: 'change' }]"
+          >
+            <el-select
+                v-model="registerForm.serviceIds"
+                multiple
+                class="limit-tags-select"
+                popper-class="limit-dropdown"
+                placeholder="请选择具体服务(可多选)"
+                style="width: 100%"
+                :disabled="!registerForm.serviceDomainId"
+            >
+              <el-option
+                  v-for="item in supportServices"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id">
+              </el-option>
+            </el-select>
+          </el-form-item>
+        </template>
+
         <el-form-item label="头像设置" class="avatar-form-item">
           <div class="avatar-selection">
             <div
@@ -176,7 +225,7 @@ import {
   reqCheckUsername,
   reqCheckNickname,
   publicAvatarUploadUrl,
-  baseUrl
+  baseUrl, reqGetServiceDomains, reqGetSupportServiceCategories
 } from '../../utils/api';
 
 export default {
@@ -240,7 +289,8 @@ export default {
     return{
       // 使用新的安全接口
       uploadUrl: publicAvatarUploadUrl,
-
+      serviceDomains: [],
+      supportServices: [],
       loginForm:{
         username:'',
         password:'',
@@ -265,6 +315,8 @@ export default {
         userTypeId: 0,
         userProfile: this.getRandomAvatar(),
       },
+      serviceDomainId: null,
+      serviceIds: [],
       registerRules: {
         nickname: [
           { validator: validateNickname, trigger: 'blur' }
@@ -284,6 +336,13 @@ export default {
       fileList:[],
     };
   },
+  watch: {
+    'registerForm.userTypeId': function(val) {
+      if (val === 1 && this.serviceDomains.length === 0) {
+        this.loadServiceDomains();
+      }
+    }
+  },
   mounted() {
     // 页面加载时获取第一次验证码
     this.getVerifyCode();
@@ -291,6 +350,28 @@ export default {
     window.sessionStorage.removeItem("state");
   },
   methods:{
+    loadServiceDomains() {
+      reqGetServiceDomains().then(resp => {
+        if (resp && resp.status === 200) {
+          this.serviceDomains = resp.obj;
+        }
+      });
+    },
+
+    handleDomainChange(domainId) {
+      // 1. 清空已选的具体服务，防止数据错乱
+      this.registerForm.serviceIds = [];
+      this.supportServices = [];
+
+      // 2. 如果选中了有效域，去后台拉取该域下的服务类型
+      if (domainId) {
+        reqGetSupportServiceCategories(domainId).then(resp => {
+          if (resp && resp.status === 200) {
+            this.supportServices = resp.obj;
+          }
+        });
+      }
+    },
     getRandomAvatar() {
       const seed = Math.random().toString(36).substring(7);
       return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
@@ -428,8 +509,13 @@ export default {
         checkPass:'',
         userTypeId: 0,
         userProfile: this.getRandomAvatar(),
+        serviceDomainId: null,
+        serviceIds: []
       };
       // 重置状态
+      this.serviceDomains = [];
+      this.supportServices = [];
+
       this.avatarLoading = false;
       this.uploadDisabled = false;
       done();
@@ -437,14 +523,23 @@ export default {
 
     submitRegisterForm(formName) {
       this.$refs[formName].validate((valid) => {
+        // 1. 额外的逻辑校验：如果是支撑人员，必须选这两项
+        if (this.registerForm.userTypeId === 1) {
+          if (!this.registerForm.serviceDomainId) {
+            this.$message.warning("支撑人员请选择所属服务域");
+            return false;
+          }
+          if (!this.registerForm.serviceIds || this.registerForm.serviceIds.length === 0) {
+            this.$message.warning("请至少选择一项支撑服务类型");
+            return false;
+          }
+        }
+
         if (valid) {
           reqUserRegister(this.registerForm).then(resp=>{
-            // 【修改】移除了手动弹窗，完全依赖 api.js 的全局拦截器
             if (resp && resp.status == 200){
               this.registerDialogVisible=false;
-              // 这里的 "注册成功" 提示已由 api.js 自动弹出，无需重复
             }
-            // 错误提示同理，api.js 会拦截非 200 状态并提示，这里无需处理 else
           })
         } else {
           this.$message.error("请正确填写信息！");
@@ -751,6 +846,28 @@ export default {
 }
 </style>
 <style>
+/* 1. 限制弹窗主体区域的高度，并开启滚动 */
+.custom-dialog .el-dialog__body {
+  /* 设置最大高度，比如屏幕高度的 50% 或固定像素 400px */
+  max-height: 55vh;
+  /* 内容超出时显示滚动条 */
+  overflow-y: auto;
+  /* 优化滚动条样式（可选） */
+  scrollbar-width: thin;
+  padding: 20px 35px; /* 保持原有的内边距 */
+}
+
+/* 2. (可选) 优化滚动条在 Chrome/Edge 下的显示 */
+.custom-dialog .el-dialog__body::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-dialog .el-dialog__body::-webkit-scrollbar-thumb {
+  background-color: #dcdfe6;
+  border-radius: 3px;
+}
+.custom-dialog .el-dialog__body::-webkit-scrollbar-track {
+  background-color: #f5f7fa;
+}
 /* 移动端适配：纯净卡片模式 (无滚动) */
 @media screen and (max-width: 768px) {
   .custom-dialog {
@@ -809,5 +926,76 @@ export default {
     height: 40px !important;
     font-size: 16px !important;
   }
+}
+
+   /* ... 原有的 .custom-dialog 等样式保持不变 ... */
+
+   /* =================================
+      多选框：横向排列 + 横向滚动 (最终版)
+      ================================= */
+
+   /* 1. 核心容器：强制一行显示，超出横向滚动 */
+   /* 1. 核心容器设置 */
+.custom-register-select .el-input__inner,
+.limit-tags-select .el-input__inner {
+  padding-left: 10px !important;
+  padding-right: 30px !important; /* 右边给箭头留位置 */
+}
+
+/* =========================================
+   以下是第二个下拉框(多选)的专属样式
+   ========================================= */
+
+/* 2. 多选标签容器：横向排列 + 滚动 */
+.limit-tags-select .el-select__tags {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+
+  /* 【核心修复】让标签也靠左，对齐输入框文字 */
+  padding-left: 10px !important;
+
+  /* 限制宽度，防止盖住右侧图标 */
+  max-width: calc(100% - 35px) !important;
+
+  /* 垂直居中 */
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
+/* Chrome/Safari 隐藏滚动条 */
+.limit-tags-select .el-select__tags::-webkit-scrollbar {
+  display: none;
+}
+
+/* 3. 处理 Vue 动画层 */
+.limit-tags-select .el-select__tags > span {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+}
+
+/* 4. 标签本身的样式 */
+.limit-tags-select .el-tag {
+  flex-shrink: 0 !important;
+  margin: 2px 4px 2px 0 !important;
+  /* 标签内部文字也紧凑一点 */
+  padding: 0 4px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 24px !important;
+  line-height: 22px !important;
+}
+
+/* 5. 确保输入框高度固定 */
+.limit-tags-select .el-input__inner {
+  height: 40px !important;
+  line-height: 40px !important;
 }
 </style>

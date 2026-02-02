@@ -80,8 +80,15 @@ export default {
         let timeA = (msgsA && msgsA.length > 0) ? new Date(msgsA[msgsA.length - 1].date).getTime() : 0;
         let timeB = (msgsB && msgsB.length > 0) ? new Date(msgsB[msgsB.length - 1].date).getTime() : 0;
 
+        if (timeA === 0 && a.lastMessageTime) {
+          timeA = new Date(a.lastMessageTime).getTime();
+        }
+        if (timeB === 0 && b.lastMessageTime) {
+          timeB = new Date(b.lastMessageTime).getTime();
+        }
+
         if (timeA > 0 || timeB > 0) {
-          return timeB - timeA;
+          return timeB - timeA; // 降序排列：时间大的在前
         }
 
         // 规则C: 在线的排在前面

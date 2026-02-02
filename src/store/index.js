@@ -480,7 +480,9 @@ const store = new Vuex.Store({
         reqGetRecentConversation().then(resp => {
           let userList = (resp && (resp.obj || resp)) || [];
           context.commit('INIT_USER_LIST', userList);
-
+          if (userList.length > 0 && !context.state.currentSession) {
+            context.commit('changeCurrentSession', userList[0]);
+          }
           // 加载活跃状态
           reqGetAllActiveSessions().then(res => {
             if (res && res.status === 200) {
@@ -521,6 +523,8 @@ const store = new Vuex.Store({
               if (active) {
                 context.state.currentSession = active;
               }
+            }else if (domainUsers.length > 0) {
+              context.commit('changeCurrentSession', domainUsers[0]);
             }
           }
         });
@@ -674,15 +678,50 @@ const store = new Vuex.Store({
 
         context.state.stomp.subscribe('/user/queue/chat', msg => {
           let receiveMsg = JSON.parse(msg.body);
-          let currentUser = context.state.currentUser;
+          let currentUser = JSON.parse(window.sessionStorage.getItem("user"));
 
           if (receiveMsg.from !== currentUser.username) {
             // --- 接收消息逻辑 ---
             let senderUser = context.state.users.find(u => u.username === receiveMsg.from);
-
-            // A. 客服端逻辑：如果是新用户发消息，刷新列表
             if (!senderUser && currentUser.userTypeId === 1) {
-              context.dispatch('initData', { silent: true });
+
+              // 1. 安全校验：如果没有 ID 或 用户名，绝对不添加 (防止添加幽灵数据)
+              if (!receiveMsg.fromId || !receiveMsg.from) {
+                console.warn("[AutoAdd] 消息缺少关键身份信息，跳过自动添加:", receiveMsg);
+              } else {
+                let newUser = {
+                  id: receiveMsg.fromId,
+                  username: receiveMsg.from,
+                  nickname: receiveMsg.fromNickname || receiveMsg.from,
+                  userProfile: receiveMsg.fromProfile,
+                  userTypeId: 0,
+                  userStateId: 1,
+                  lastMessageTime: receiveMsg.createTime || new Date(),
+                  conversationId: receiveMsg.conversationId,
+                  isReceptionist: false
+                };
+
+                // 2. 双重去重检查 (同时检查 ID 和 Username)
+                // 防止 ID 类型不一致或 ID 缺失导致的重复添加
+                let exists = context.state.users.find(u =>
+                    u.id == newUser.id || u.username === newUser.username
+                );
+
+                if (!exists) {
+                  // 确实不存在，插入到最前面
+                  context.state.users.unshift(newUser);
+                  senderUser = newUser;
+                  console.log("[AutoAdd] 成功自动添加新用户:", newUser.nickname);
+                } else {
+                  // 3. 如果已存在 (比如 ID 没对上但 Username 对上了)，修正它
+                  // 这能解决“Chat逻辑”和“START逻辑”数据不完全一致的问题
+                  if (!exists.id) Vue.set(exists, 'id', newUser.id);
+                  if (!exists.conversationId) Vue.set(exists, 'conversationId', newUser.conversationId);
+
+                  // 把它捞出来赋值给 senderUser，确保后续逻辑能用
+                  senderUser = exists;
+                }
+              }
             }
 
             // B. 普通用户逻辑：关键路由映射
