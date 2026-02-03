@@ -54,7 +54,7 @@
                       :class="{ 'active': n <= entry.score }"
                       style="cursor: default;"
                   ></i>
-                  <span class="score-text">{{ entry.score }} 分</span>
+<!--                  <span class="score-text">{{ entry.score }} 分</span>-->
                 </div>
 
                 <div class="rating-action">
@@ -80,9 +80,9 @@
                       @click="handleManualRate(n, entry.conversationId || entry.conversation_id, entry)"
                   ></i>
 
-                  <span class="score-text">
+<!--                  <span class="score-text">
                     {{ tempScores[entry.conversationId || entry.conversation_id] || 0 }} 分
-                  </span>
+                  </span>-->
                 </div>
 
                 <div class="rating-action">
@@ -116,7 +116,7 @@
                       :type="entry.state === 3 || entry.state === 2 ? 'success' : 'info'"
                       size="small"
                       round
-                      :disabled="entry.state === 3 || entry.state === 4"
+                      :disabled="entry.state !== 2 || entry.conversationId !== currentSession.conversationId"
                       @click="handleSolved(entry)">
                     已解决
                   </el-button>
@@ -125,7 +125,7 @@
                       :type="entry.state === 4 || entry.state === 2 ? 'danger' : 'info'"
                       size="small"
                       round
-                      :disabled="entry.state === 3 || entry.state === 4"
+                      :disabled="entry.state !== 2 || entry.conversationId !== currentSession.conversationId"
                       @click="handleUnsolved(entry)">
                     未解决
                   </el-button>
@@ -134,7 +134,8 @@
 
                 <div v-else class="rating-label" style="color: #909399; font-size: 12px; margin-top:10px;">
                   <span v-if="entry.state === 3" style="color: #67C23A;">(用户已确认解决)</span>
-                  <span v-else-if="entry.state === 4" style="color: #F56C6C;">(用户反馈未解决)</span>
+                  <span v-else-if="entry.state === 4" style="color: #e88c24;">(用户反馈未解决)</span>
+                  <span v-else-if="entry.conversationId !== currentSession.conversationId" style="color: #f4302a;">(支撑人员强制关闭)</span>
                   <span v-else>(等待用户确认中...)</span>
                 </div>
               </div>
@@ -237,10 +238,11 @@ export default {
       isUserScrollingUp: false, // 用户是否往上滚了（不在底部）
       unreadNewMsgCount: 0,      // 累积的未读新消息数
       defaultAvatar: defaultAvatar,
+      currentUser: JSON.parse(window.sessionStorage.getItem('user') || '{}')
     }
   },
   computed: {
-    ...mapState(['sessions', 'currentSession', 'currentUser']),
+    ...mapState(['sessions', 'currentSession', ]),
 
     dialogWidth() {
       return this.screenWidth < 768 ? '90%' : '400px';
@@ -307,6 +309,7 @@ export default {
     window.removeEventListener('resize', this.handleResize);
   },
   methods: {
+
     handleResize() {
       this.screenWidth = document.body.clientWidth;
     },
@@ -314,12 +317,17 @@ export default {
     handleSolved(entry) {
       let conversationId = entry.conversationId;
       if (!conversationId) return;
-
+      let currentConversationId = this.currentSession.conversationId;
+      if(currentConversationId == null){
+        this.$message.error("当前会话已关闭");
+        return;
+      }
       this.$confirm('确认问题已解决并结束本次服务吗?', '提示', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         type: 'success'
       }).then(() => {
+
         reqClosePrivateChat(conversationId, entry.id).then(resp => {
           if (resp && resp.status === 200) {
             this.$set(entry, 'state', 3);
@@ -332,11 +340,14 @@ export default {
     handleUnsolved(entry) {
       let conversationId = entry.conversationId || entry.conversation_id;
       if (!conversationId) return;
-
+      let currentConversationId = this.currentSession.conversationId;
+      if(currentConversationId == null){
+        this.$message.error("当前会话已关闭");
+        return;
+      }
       reqConfirmUnsolved(conversationId, entry.id ).then(resp => {
         if (resp && resp.status === 200) {
           this.$set(entry, 'state', 4); // 更新本地视图
-          console.log("这是entry：", entry);
         }
       });
     },
@@ -445,7 +456,7 @@ export default {
       }
     },
 
-    // 【修改】开启弹窗，接收 domainId
+    // 开启弹窗，接收 domainId
     openServiceDialog(domainId) {
       if (this.isChatActive) {
         this.$message.warning("当前会话已开启，无需重复操作");
@@ -868,6 +879,7 @@ export default {
   font-size: 14px;
   color: #303133;
   margin-bottom: 10px;
+  padding-left: 15px;
 }
 
 .rating-action {

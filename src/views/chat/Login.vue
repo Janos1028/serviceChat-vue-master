@@ -424,10 +424,7 @@ export default {
           reqUserLogin(this.loginForm).then(resp => {
             this.fullscreenLoading = false;
             if (resp && resp.status == 200 && resp.obj) {
-              // ... 登录成功的逻辑保持不变 ...
-              this.$store.state.currentUser = resp.obj;
               window.sessionStorage.setItem("user", JSON.stringify(resp.obj));
-
               if (this.checked) {
                 window.localStorage.setItem("user", JSON.stringify(resp.obj));
               } else {

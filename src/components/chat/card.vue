@@ -59,6 +59,7 @@ export default {
       // 1. 【修改】初始化为空对象，不再从 sessionStorage 获取
       user: {},
       defaultAvatar: defaultAvatar,
+
     }
   },
   computed: {
@@ -105,6 +106,7 @@ export default {
           // 3. 【确认】后端返回的数据直接赋值给 user
           // resp 结构是 User 对象，包含 userStateId, nickname, userProfile 等
           this.user = resp.obj;
+          
           console.log("卡片数据已同步，当前状态ID:", this.user.userStateId);
         }
       })

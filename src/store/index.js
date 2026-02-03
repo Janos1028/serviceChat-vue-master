@@ -28,7 +28,6 @@ if (savedState) {
   if (!savedState.sessions) savedState.sessions = {};
   if (!savedState.isDot) savedState.isDot = {};
   if (!savedState.users) savedState.users = [];
-  if (!savedState.conversationToServiceMap) savedState.conversationToServiceMap = {};
 }
 const store = new Vuex.Store({
   state: savedState || {
@@ -36,81 +35,88 @@ const store = new Vuex.Store({
     sessions: {},
     // 用户列表：每个 User 对象内部将包含 conversationId 属性，以此判断会话是否开启
     users: [],
-    currentUser: null,
     currentSession: null, // 当前选中的 User 对象
-
-    // 路由映射 (普通用户端专用：ConversationId -> ServiceUsername)
-    conversationToServiceMap: {},
 
     filterKey: '',
     stomp: null,
     isStompConnected : false,
     isDot: {}, // 红点状态
   },
-
   mutations: {
     initRoutes(state, data) { state.routes = data; },
     RESET_STATE(state) {
       state.routes = []; state.sessions = {}; state.users = [];
-      state.currentUser = null; state.currentSession = null;
+      state.currentSession = null;
       state.isChatActive = false;
       state.isDot = {}; state.stomp = null;
     },
-    REGISTER_CONVERSATION_MAPPING(state, { conversationId, serviceUsername }) {
-      // 双重保险：如果对象不存在，立即创建
-      if (!state.conversationToServiceMap) {
-        Vue.set(state, 'conversationToServiceMap', {});
-      }
-      Vue.set(state.conversationToServiceMap, conversationId, serviceUsername);
-      console.log('Mapping Registered:', conversationId, '->', serviceUsername);
-    },
+
     UPDATE_USER_STATE(state, { userId, userStateId }) {
       let user = state.users.find(u => u.id === userId);
       if (user) Vue.set(user, 'userStateId', userStateId);
       if (state.currentSession && state.currentSession.id === userId) Vue.set(state.currentSession, 'userStateId', userStateId);
     },
     INIT_ACTIVE_SESSIONS(state, sessionsMap) {
+      let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
       if (!sessionsMap || !state.users.length) return;
 
       // sessionsMap 结构: { "userId": "convId" } (后端 Redis 返回)
       state.users.forEach(user => {
         let convId = null;
-
+        let targetId = null;
         // 根据身份匹配 Key
-        if (state.currentUser.userTypeId === 1) {
+        if (currentUser.userTypeId === 1) {
           // 客服端：Key 是用户 ID
           convId = sessionsMap[user.id.toString()];
         } else {
-          // 用户端：Key 是 Service Username (或 StaffID，视后端返回而定)
-          // 这里主要处理客服端的逻辑，用户端通常是点击后才建立连接
-          convId = sessionsMap[user.username];
+          // 1. 优先尝试匹配 username (如 "service_1")
+          if (sessionsMap[user.username]) {
+            convId = sessionsMap[user.username];
+          }
+              // 场景 2: Key 是纯数字 ID (您的真实情况：{1: "uuid"})
+          // 这里的 Key "1" 既匹配了 serviceDomainId，又是对方的 ID
+          else if (user.serviceDomainId && sessionsMap[user.serviceDomainId.toString()]) {
+
+            // 1. 拿到会话ID
+            convId = sessionsMap[user.serviceDomainId.toString()];
+
+            // 2. 【核心修复】直接拿到对方ID！
+            // 既然 Key 就是对方 ID，而我们是用 serviceDomainId 匹配上的
+            // 说明此时 对方ID = serviceDomainId
+            targetId = user.serviceDomainId;
+          }
         }
 
         // 直接修改 User 对象属性
+        // 统一赋值
         if (convId) {
           Vue.set(user, 'conversationId', convId);
+
+          // 如果拿到了对方 ID，直接赋值，解决 null 的问题
+          if (targetId) {
+            Vue.set(user, 'id', targetId);
+            console.log(`[Init] 自动恢复会话对象: ${user.nickname}, ID: ${targetId}`);
+
+            // 如果当前正好选中了这个会话，同步更新 currentSession.id
+            if (state.currentSession && state.currentSession.username === user.username) {
+              Vue.set(state.currentSession, 'id', targetId);
+            }
+          }
         } else {
           Vue.set(user, 'conversationId', null);
         }
       });
     },
 
-    INIT_DATA(state) {
-      // 1. 确保获取到最新的当前用户
-      let user = JSON.parse(window.sessionStorage.getItem("user"));
-      state.currentUser = user;
-      // 注意：原先这里的 API 请求逻辑全部移到 actions 中处理，防止数据冲突
-    },
-
     changeCurrentSession(state, currentSession) {
       state.currentSession = currentSession;
-
+      let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
       if (currentSession) {
         // 1. 清除红点 (视觉)
-        Vue.set(state.isDot, state.currentUser.username + "#" + currentSession.username, false);
+        Vue.set(state.isDot, currentUser.username + "#" + currentSession.username, false);
 
         // 2. 【核心新增】调用后端接口更新已读状态
-        if (state.currentUser.userTypeId === 1) {
+        if (currentUser.userTypeId === 1) {
           // --- 客服端逻辑 ---
           // 确保有真实的用户ID才调用
           if (currentSession.id) {
@@ -132,11 +138,11 @@ const store = new Vuex.Store({
         }
 
         // --- 自动发送欢迎语逻辑 (普通用户端) ---
-        if (state.currentUser.userTypeId !== 1 && currentSession.username.startsWith('service_') ) {
+        if (currentUser.userTypeId !== 1 && currentSession.username.startsWith('service_') ) {
           let targetUser = state.users.find(u => u.username === currentSession.username) || currentSession;
           // 严谨判断：如果没有活跃会话 ID，才允许显示欢迎语
           if (state.currentSession.id===null) {
-            let key = state.currentUser.username + "#" + currentSession.username;
+            let key = currentUser.username + "#" + currentSession.username;
             if (!state.sessions[key]) Vue.set(state.sessions, key, []);
             let nickname = targetUser.nickname || '服务中心';
             let domainId = targetUser.serviceDomainId;
@@ -176,19 +182,10 @@ const store = new Vuex.Store({
         if (isActive) {
           // 激活：写入 conversationId
           Vue.set(u, 'conversationId', conversationId);
-
-          // 用户端专用：维护路由映射
-          if (state.currentUser.userTypeId !== 1) {
-            Vue.set(state.conversationToServiceMap, conversationId, u.username);
-          }
         } else {
           // 关闭：置空
           Vue.set(u, 'conversationId', null);
           Vue.set(u, 'serviceName', null);
-          // 清理映射
-          if (state.currentUser.userTypeId !== 1 && conversationId) {
-            Vue.delete(state.conversationToServiceMap, conversationId);
-          }
         }
       };
 
@@ -210,12 +207,12 @@ const store = new Vuex.Store({
       }
     },
     addMessage(state, msg) {
-
+      let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
       if (msg.messageTypeId === 7) {
 
         // 1. 【场景：客服发起 -> 通知用户】
         // 如果我是普通用户 (userTypeId != 1)，且收到 state=2 (客服发起了结束申请)
-        if (state.currentUser && state.currentUser.userTypeId !== 1) {
+        if (currentUser && currentUser.userTypeId !== 1) {
           if (msg.state === 2) {
             Notification.warning({
               title: '服务确认',
@@ -229,7 +226,7 @@ const store = new Vuex.Store({
 
         // 2. 【场景：用户反馈 -> 通知客服】
         // 如果我是客服人员 (userTypeId == 1)，且收到用户的反馈 (state 3或4)
-        if (state.currentUser && state.currentUser.userTypeId === 1) {
+        if (currentUser && currentUser.userTypeId === 1) {
 
           // 用户点击了“已解决”
           if (msg.state === 3) {
@@ -295,7 +292,7 @@ const store = new Vuex.Store({
         }
       }
       // 这里的 msg 已经在 connect 中被修正过 from 了，所以 key 生成是正确的
-      let key = state.currentUser.username + "#" + msg.to;
+      let key = currentUser.username + "#" + msg.to;
       if (!state.sessions[key]) Vue.set(state.sessions, key, []);
       console.log("这是msg：", msg)
       if (msg.id) {
@@ -336,7 +333,8 @@ const store = new Vuex.Store({
       if (targetUser) Vue.set(targetUser, 'lastMessageTime', msg.createTime || new Date());
     },
     MARK_SESSION_READ(state, readerUsername) {
-      let key = state.currentUser.username + "#" + readerUsername;
+      let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
+      let key = currentUser.username + "#" + readerUsername;
       if (state.sessions[key]) {
         state.sessions[key].forEach(msg => { if (msg.self && msg.messageTypeId !== 7) msg.state = 1; });
         Vue.set(state.sessions, key, [...state.sessions[key]]);
@@ -344,8 +342,8 @@ const store = new Vuex.Store({
     },
     // SET_HISTORY_MESSAGES (支持反转、保留、兜底生成)
     SET_HISTORY_MESSAGES(state, { username, messages, prepend = false }) {
-
-      let key = state.currentUser.username + "#" + username;
+      let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
+      let key = currentUser.username + "#" + username;
 
       // 格式化后端返回的消息
       let formatted = messages.map(m => {
@@ -355,7 +353,7 @@ const store = new Vuex.Store({
           date: m.createTime,
           fromNickname: m.fromName,
           messageTypeId: m.messageTypeId,
-          self: m.fromId == state.currentUser.id,
+          self: m.fromId == currentUser.id,
           state: m.state,
           fromProfile: m.fromProfile,
           isLocal: false,
@@ -392,7 +390,7 @@ const store = new Vuex.Store({
 
 
       // 生成欢迎语逻辑 (保持不变)
-      if (state.currentUser.userTypeId !== 1 && username.startsWith('service_')&&!state.currentSession.id  ) {
+      if (currentUser.userTypeId !== 1 && username.startsWith('service_')&&!state.currentSession.id  ) {
         if (oldSession && oldSession.length > 0) {
           welcomeMsg = oldSession.find(m => m.isLocal && m.content && m.content.includes('open-service-dialog'));
         }
@@ -419,7 +417,6 @@ const store = new Vuex.Store({
         Vue.set(state.sessions, key, formatted);
       }
     },
-    INIT_USER(state, data) { state.currentUser = data; },
     INIT_USER_LIST(state, data) { state.users = data; },
 
     RESTORE_RECEPTIONIST(state) {
@@ -454,8 +451,6 @@ const store = new Vuex.Store({
         Vue.set(state.currentSession, 'conversationId', conversationId);
         Vue.set(state.currentSession, 'isReceptionist', false);
         Vue.set(state.currentSession, 'serviceName', serviceName)
-
-        Vue.set(state.conversationToServiceMap, conversationId, state.currentSession.username);
       }
     },
   },
@@ -469,7 +464,7 @@ const store = new Vuex.Store({
 
       const userObj = JSON.parse(userJson);
       // 立即更新 state，确保后续逻辑使用的身份是最新且同步的
-      context.commit('INIT_USER', userObj);
+
 
       // 2. 基于 userObj 进行身份隔离，避免支撑人员进入普通用户分支
       if (userObj.userTypeId === 1) {
@@ -499,7 +494,7 @@ const store = new Vuex.Store({
             let domainUsers = domains.map(d => {
               const username = 'service_' + d.id;
 
-              // 【关键修改】从当前 state 或 savedState 中查找是否已存在该用户的会话信息
+              // 从当前 state 或 savedState 中查找是否已存在该用户的会话信息
               const oldUser = context.state.users.find(u => u.username === username);
 
               return {
@@ -526,10 +521,14 @@ const store = new Vuex.Store({
             }else if (domainUsers.length > 0) {
               context.commit('changeCurrentSession', domainUsers[0]);
             }
+            reqGetAllActiveSessions().then(res => {
+              if (res && res.status === 200) {
+                context.commit('INIT_ACTIVE_SESSIONS', res.obj);
+              }
+            });
           }
         });
       }
-
       // 统一连接 WebSocket
 
 
@@ -537,7 +536,7 @@ const store = new Vuex.Store({
         if (resp && resp.status === 200 && resp.obj) {
           resp.obj.forEach(senderId => {
             let sender = context.state.users.find(u => u.id === senderId);
-            if(sender) Vue.set(context.state.isDot, currentUser.username + "#" + sender.username, true);
+            if(sender) Vue.set(context.state.isDot, userObj.username + "#" + sender.username, true);
           });
         }
       });
@@ -562,11 +561,6 @@ const store = new Vuex.Store({
 
             // 注册会话映射，确保 WS 消息能路由回来
             if (state.currentSession) {
-              commit('REGISTER_CONVERSATION_MAPPING', {
-                conversationId: data.conversationId,
-                serviceUsername: state.currentSession.username
-              });
-
               commit('SET_CHAT_ACTIVE', {
                 conversationId: data.conversationId,
                 isActive: true,
@@ -590,6 +584,7 @@ const store = new Vuex.Store({
     },
 
     async loadPrivateHistory({ commit, state }, { toUser, page = 1, size = 20 }) {
+      let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
       if (!toUser) return 0;
 
       try {
@@ -598,7 +593,7 @@ const store = new Vuex.Store({
         // -------------------------
         // 1. 普通用户逻辑 (User -> Service)
         // -------------------------
-        if (state.currentUser.userTypeId !== 1) {
+        if (currentUser.userTypeId !== 1) {
           let domainId = toUser.serviceDomainId;
           if (!domainId) return 0;
 
@@ -657,11 +652,12 @@ const store = new Vuex.Store({
       if (context.state.stomp && context.state.stomp.connected) {
         return;
       }
+      let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
+      if (!currentUser || !currentUser.token) return;
 
-      let token = (context.state.currentUser || JSON.parse(window.sessionStorage.getItem("user"))).token;
       context.state.stomp = Stomp.over(new SockJS(baseUrl +'/ws/ep'));
 
-      context.state.stomp.connect({ 'Authorization': 'Bearer ' + token }, success => {
+      context.state.stomp.connect({ 'Authorization': 'Bearer ' + currentUser.token }, success => {
         context.state.stomp.subscribe("/topic/notification", msg => {});
 
         // 当有用户上线/下线时，后端会发消息到这里
@@ -731,7 +727,11 @@ const store = new Vuex.Store({
               // 1. 优先尝试：通过 conversationId 查找映射 (最准确)
               // 这能解决“打招呼”消息和 START 信号时序不一致的问题
               if (receiveMsg.conversationId) {
-                mappedService = context.state.conversationToServiceMap[receiveMsg.conversationId];
+                // 遍历所有用户(服务号)，看谁拿着这个 conversationId
+                let targetUser = context.state.users.find(u => u.conversationId === receiveMsg.conversationId);
+                if (targetUser) {
+                  mappedService = targetUser.username;
+                }
               }
 
               // 2. 兜底策略：如果没找到映射（可能是第一条消息，START信号还没到）
@@ -740,13 +740,6 @@ const store = new Vuex.Store({
               if (!mappedService && context.state.currentSession && context.state.currentSession.username.startsWith('service_')) {
                 mappedService = context.state.currentSession.username;
 
-                // 关键：立即补录映射关系，确保后续消息也能正常接收
-                if (receiveMsg.conversationId) {
-                  context.commit('REGISTER_CONVERSATION_MAPPING', {
-                    conversationId: receiveMsg.conversationId,
-                    serviceUsername: mappedService
-                  });
-                }
               }
 
               // 3. 执行“路由劫持”
@@ -877,13 +870,11 @@ const store = new Vuex.Store({
               // 【保险 1】尝试通过唯一的会话 ID 查找对应的虚拟服务号
               // 这不受客服人员变更影响，只认会话 ID
               if (receiveMsg.conversationId) {
-                targetService = context.state.conversationToServiceMap[receiveMsg.conversationId];
-              }
-
-              // 【保险 2】如果查不到（Start 信号晚到），但用户正打开着以 'service_' 开头的窗口
-              // 说明这是用户主动发起的咨询，直接归入当前窗口
-              if (!targetService && context.state.currentSession && context.state.currentSession.username.startsWith('service_')) {
-                targetService = context.state.currentSession.username;
+                // 改为遍历 users 列表查找
+                let targetUser = context.state.users.find(u => u.conversationId === receiveMsg.conversationId);
+                if (targetUser) {
+                  targetService = targetUser.username;
+                }
               }
 
               // 修正目标 ID：把“具体的客服工号”替换为“虚拟服务号”
@@ -903,7 +894,8 @@ const store = new Vuex.Store({
         context.state.stomp.subscribe('/user/queue/chat/status', msg => {
           let payload = JSON.parse(msg.body);
           let current = context.state.currentSession;
-          let isUser = context.state.currentUser.userTypeId !== 1; // 判断是否普通用户
+          let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
+          let isUser = currentUser.userTypeId !== 1; // 判断是否普通用户
 
           // --- 开启会话 (START) ---
           if (payload.type === 'START') {
@@ -1035,7 +1027,7 @@ const store = new Vuex.Store({
               let current = context.state.currentSession;
 
               if (current && current.username.startsWith('service_')) {
-                let key = context.state.currentUser.username + "#" + current.username;
+                let key = currentUser.username + "#" + current.username;
                 if (!context.state.sessions[key]) Vue.set(context.state.sessions, key, []);
 
                 let nickname = current.nickname || '服务中心';
@@ -1063,5 +1055,5 @@ const store = new Vuex.Store({
     }
   }
 })
-
+window.store = store;
 export default store;

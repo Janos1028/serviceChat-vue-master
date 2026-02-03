@@ -111,11 +111,12 @@ let base = process.env.VUE_APP_API_BASE_URL || 'http://120.55.5.60:9090'
 export const uploadUrl = baseUrl + '/user/ossFileUpload'; // 头像上传地址
 export const publicAvatarUploadUrl = baseUrl + '/user/public/uploadAvatar';
 // 通用请求方法
-export const postRequest = (url, params) => {
+export const postRequest = (url, data,params) => {
     return axios({
         method: 'post',
         url: `${baseUrl}${url}`,
-        data: params
+        data: data,
+        params: params,
     });
 };
 
@@ -123,7 +124,7 @@ export const putRequest = (url, params) => {
     return axios({
         method: 'put',
         url: `${baseUrl}${url}`,
-        data: params
+        data: params,
     });
 };
 
@@ -146,8 +147,8 @@ export const deleteRequest = (url, params) => {
 // --- 业务接口封装 ---
 
 // 1. 登录与注册
-export const reqUserLogin = (params) => postRequest('/user/login', params);
-export const reqUserRegister = (params) => postRequest('/user/register', params);
+export const reqUserLogin = (data) => postRequest('/user/login', data);
+export const reqUserRegister = (data) => postRequest('/user/register', data);
 export const reqUserLogout = () => getRequest('/user/logout');
 // 验证相关
 export const reqVerifyCode = () => getRequest('/verifyCode');
@@ -162,12 +163,12 @@ export const reqAdminLogin = (params) => postRequest('/admin/login', params);
 export const reqAdminLogout = () => getRequest('/admin/logout');
 
 
-// 3. 用户管理
+// 3. 管理端用户管理
 export const reqGetAllUsersByPage = (params) => getRequest('/admin/getAllUserByPage', params);
 export const reqUpdateUserStatus = (params) => putRequest(`/admin/changeLockedStatus?id=${id}&isLocked=${isLocked}`, params);
 export const reqDeleteUser = (id) => deleteRequest(`/admin/${id}`);
 export const reqDeleteUserByIds = (params) => deleteRequest('/admin/', params);
-
+// 用户端状态获取和管理
 export const reqChangeUserState = (stateId) => postRequest(`/user/supporter/changeUserState?stateId=${stateId}`);
 export const reqGetCard = () => getRequest(`/user/getCard`);
 // 5. 群聊消息管理
@@ -193,6 +194,8 @@ export const reqUpdateMsgRead = (fromId) => postRequest(`/user/private/updateMsg
 export const reqStartPrivateChat = (domainId, serviceId) => postRequest(`/user/private/start?domainId=${domainId}&serviceId=${serviceId}`);
 // 客服请求结束会话（发起确认申请，状态转为3）
 export const reqRequestClosePrivateChat = (conversationId,isActive) => postRequest(`/user/private/requestClose?conversationId=${conversationId}&isActive=${isActive}`);
+// 客服请求结束会话（发起确认申请，状态转为4）
+export const reqForceClosePrivateChat = (params) => postRequest(`/user/private/forceClose`,null, params);
 // 用户点击“未解决”（恢复会话，状态转为1）
 export const reqConfirmUnsolved = (conversationId,messageId) => postRequest(`/user/private/confirmUnsolved?conversationId=${conversationId}&messageId=${messageId}`);
 export const reqUpdateServiceMsgRead = (domainId, staffId) => {
@@ -203,8 +206,8 @@ export const reqUpdateServiceMsgRead = (domainId, staffId) => {
     return postRequest(url);
 };
 // 转接支撑人员
-export const reqTransferChat = (conversationId, newServiceId, domainId) => {
-    return postRequest(`/user/private/transfer?conversationId=${conversationId}&newServiceId=${newServiceId}&domainId=${domainId}`);
+export const reqTransferChat = (params) => {
+    return postRequest(`/user/private/transfer`,null,params);
 }
 export const reqSubmitScore = (conversationId, score) => {
     return postRequest(`/user/private/submitScore?conversationId=${conversationId}&score=${score}`);
@@ -213,5 +216,4 @@ export const reqSubmitScore = (conversationId, score) => {
 export const reqUploadFile = (params) => postRequest('/user/file', params);
 export const reqOssFileUpload = (params) => postRequest('/user/ossFileUpload', params);
 // 8. 其他
-
 export const reqGetPrivateMsgLogs = (params) => getRequest('/admin/privateMsg/list', params);

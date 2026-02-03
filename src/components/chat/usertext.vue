@@ -38,6 +38,18 @@
         </div>
 
         <div v-if="currentUser && currentUser.userTypeId === 1" class="action-btn-group">
+
+          <el-button
+              type="danger"
+              size="mini"
+              round
+              plain
+              @click="forceEndChat"
+              :disabled="!isChatActive"
+              style="margin-right: 8px;"
+          >
+            强制结束
+          </el-button>
           <el-button
               type="primary"
               size="mini"
@@ -52,7 +64,7 @@
           </el-button>
 
           <el-button
-              type="danger"
+              type="warning"
               size="mini"
               round
               plain
@@ -144,7 +156,7 @@ import {
   reqClosePrivateChat,
   reqTransferChat,
   reqGetSupportServiceCategories,
-  reqRequestClosePrivateChat
+  reqRequestClosePrivateChat, reqForceClosePrivateChat
 } from "../../utils/api";
 
 export default {
@@ -158,10 +170,11 @@ export default {
       transferLoading: false,
       transferServiceList: [],
       selectedTransferServiceId: null,
+      currentUser: JSON.parse(window.sessionStorage.getItem('user') || '{}')
     }
   },
   computed: {
-    ...mapState(['sessions', 'currentSession', 'currentUser']),
+    ...mapState(['sessions', 'currentSession']),
     isChatActive() {
       return this.currentSession && !!this.currentSession.conversationId;
     },
@@ -193,7 +206,7 @@ export default {
     addMessageByClick() {
       if (!this.isChatActive) return;
       if (!this.content || this.content.match(/^[ ]*$/)) {
-        this.$message({ showClose: true, message: '不能发送空白信息', type: 'warning' });
+        this.$message({showClose: true, message: '不能发送空白信息', type: 'warning'});
         return;
       }
       this.sendMessage(this.content, 1);
@@ -213,7 +226,7 @@ export default {
           if (this.content.length && !this.content.match(/^[ ]*$/)) {
             this.sendMessage(this.content, 1);
           } else {
-            this.$message({ showClose: true, message: '不能发送空白信息', type: 'warning' });
+            this.$message({showClose: true, message: '不能发送空白信息', type: 'warning'});
           }
         }
       }
@@ -254,7 +267,7 @@ export default {
       this.showEmoji = false;
     },
     handleImgSuccess(res, file) {
-      if(res.status === 200) {
+      if (res.status === 200) {
         this.sendMessage(res.obj, 2);
       } else {
         this.$message.error(res.msg);
@@ -268,7 +281,7 @@ export default {
       return isLt2M;
     },
     handleFileSuccess(res, file) {
-      if(res.status === 200) {
+      if (res.status === 200) {
         this.sendMessage(res.obj, 3);
       } else {
         this.$message.error(res.msg);
@@ -306,7 +319,7 @@ export default {
       });
     },
 
-    // 【新增】确认转接
+    // 确认转接
     confirmTransfer() {
       if (!this.selectedTransferServiceId) {
         this.$message.warning("请选择要转接的服务团队");
@@ -316,8 +329,13 @@ export default {
       this.transferLoading = true;
       let conversationId = this.currentSession.conversationId;
       let domainId = this.currentSession.serviceDomainId || this.currentUser.serviceDomainId;
-
-      reqTransferChat(conversationId, this.selectedTransferServiceId, domainId).then(resp => {
+      let params = {
+        conversationId: conversationId,
+        newServiceId: this.selectedTransferServiceId,
+        domainId: domainId,
+        isActive: 0
+      }
+      reqTransferChat(params).then(resp => {
         this.transferLoading = false;
         if (resp && resp.status === 200) {
           this.transferDialogVisible = false;
@@ -351,11 +369,33 @@ export default {
         type: 'warning'
       }).then(() => {
         let isActive = 3;
-        reqRequestClosePrivateChat(this.currentSession.conversationId,  isActive);
+        reqRequestClosePrivateChat(this.currentSession.conversationId, isActive);
         // 注意：后续状态清理会在 store 的 actions.endPrivateChat 里自动完成
       }).catch(() => {
-          });
+      });
     },
+
+    forceEndChat() {
+        let cid = this.currentSession.conversationId;
+
+        if (!cid) {
+          this.$message.warning("当前没有正在进行的人工会话");
+          return;
+        }
+
+        this.$confirm('此操作将直接关闭当前会话，不需要用户确认。是否继续?', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }).then(() => {
+          let isActive = 4;
+          let params = {
+            conversationId: cid,
+            isActive: isActive
+          }
+          reqForceClosePrivateChat(params);
+        })
+      }
   }
 }
 </script>

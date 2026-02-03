@@ -50,11 +50,12 @@ export default {
   name: 'list',
   data() {
     return {
-      defaultAvatar: defaultAvatar
+      defaultAvatar: defaultAvatar,
+      currentUser: JSON.parse(window.sessionStorage.getItem('user') || '{}')
     }
   },
   computed: {
-    ...mapState(['sessions', 'users', 'currentSession', 'isDot', 'currentUser', 'filterKey']),
+    ...mapState(['sessions', 'users', 'currentSession', 'isDot', 'filterKey']),
 
     sortedUserList() {
       // 1. 搜索过滤
@@ -97,7 +98,6 @@ export default {
     },
 
   },
-  // ... methods 保持不变 ...
   methods: {
     changeCurrentSession(currentSession) {
       if (this.isBatchMode) {

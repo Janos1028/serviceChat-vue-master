@@ -61,20 +61,28 @@ export default {
 .chat-title {
   width: 100%;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center; /* 居中显示 */
-  position: relative;
-  padding: 0 20px;
-  box-sizing: border-box;
-  border-bottom: 1px solid #dcdfe6;
+  position: relative; /* 核心：让子元素相对于这里定位 */
   background-color: #fff;
+  border-bottom: 1px solid #dcdfe6;
+  box-sizing: border-box;
 }
 
+/* 2. 中间用户信息区：无视左右干扰，强制正居中 */
 .user-info-area {
+  position: absolute;  /* 脱离文档流，悬浮在上面 */
+  left: 50%;           /* 定位到水平 50% */
+  top: 50%;            /* 定位到垂直 50% */
+  transform: translate(-50%, -50%); /* 往回拉自身的一半，实现完美居中 */
+
+  /* 内部布局：头像和文字对齐 */
   display: flex;
   align-items: center;
   gap: 10px;
+  z-index: 10; /* 确保层级较高 */
+
+  /* 防止文字换行导致高度抖动 */
+  white-space: nowrap;
+  pointer-events: none; /* (可选) 让点击穿透，如果你不需要点击这个区域的话 */
 }
 
 .title-avatar {
@@ -120,5 +128,9 @@ export default {
 .title-placeholder {
   font-size: 14px;
   color: #999;
+  position: absolute;  /* 脱离文档流，悬浮在上面 */
+  left: 50%;           /* 定位到水平 50% */
+  top: 50%;            /* 定位到垂直 50% */
+  transform: translate(-50%, -50%); /* 往回拉自身的一半，实现完美居中 */
 }
 </style>

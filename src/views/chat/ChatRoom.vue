@@ -100,11 +100,10 @@ export default {
       newMsgCount: 0,
       savedLastMsg: null,
       user: JSON.parse(window.sessionStorage.getItem('user') || '{}'),
-
     }
   },
   computed: {
-    ...mapState(['sessions', 'currentUser']),
+    ...mapState(['sessions']),
     currentSession() {
       return this.$store.state.currentSession;
     },
@@ -116,11 +115,11 @@ export default {
       if (hour < 18) return '下午好';
       return '晚上好';
     },
-    // 【新增】实时获取当前会话的消息列表
+    // 实时获取当前会话的消息列表
     currentMsgList() {
-      if (!this.currentSession || !this.$store.state.currentUser) return [];
+      if (!this.currentSession || !this.user) return [];
       // 调试日志：检查 Key 是否匹配
-      let key = this.$store.state.currentUser.username + "#" + this.currentSession.username;
+      let key = this.user.username + "#" + this.currentSession.username;
       const msgs = this.$store.state.sessions[key] || [];
       return msgs;
     },
@@ -380,7 +379,22 @@ export default {
 .toggle-btn { cursor: pointer; width: 36px; height: 36px; border-radius: 50%; color: #5f6368; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
 .toggle-btn:hover { background-color: rgba(0, 0, 0, 0.05); color: #202124; }
 .toggle-btn i { font-size: 20px; }
-.main-toggle { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); z-index: 100; }
+.main-toggle {
+  position: absolute;  /* ✅ 关键：改为 absolute，脱离文档流 */
+  left: 0;             /* ✅ 贴紧左边 */
+  top: 0;              /* ✅ 贴紧顶部 */
+  height: 100%;        /* ✅ 高度铺满 */
+  width: 50px;         /* ✅ 给个固定宽度方便点击 */
+
+  /* 布局调整，让图标在按钮里居中 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  z-index: 999;        /* ✅ 保证层级最高，能被点到 */
+  transform: none;     /* ✅ 去掉原来的位移 */
+  margin: 0;           /* ✅ 去掉可能存在的 margin */
+}
 @media screen and (max-width: 768px) {
   .sidebar-mask { display: block; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 900; }
   .sidebar-container { position: absolute; left: 0; top: 0; height: 100%; z-index: 1000; box-shadow: 2px 0 8px rgba(0,0,0,0.1); }
@@ -399,7 +413,7 @@ export default {
 
 /* 头部固定高度 */
 .top-header {
-  height: 60px; /*稍微加高一点，更大气*/
+  height: 60px;
   flex-shrink: 0;
   border-bottom: 1px solid #e6e6e6;
   display: flex;
@@ -407,6 +421,8 @@ export default {
   padding: 0 20px;
   background: #fff;
   z-index: 100;
+
+  position: relative; /* ✅ 关键：新增这行 */
 }
 
 /* 下方内容区域撑满剩余空间 */
@@ -535,8 +551,5 @@ export default {
 .toggle-btn {
   margin-right: 15px; /* 给标题留点空隙 */
 }
-.main-toggle {
-  position: static; /* 取消之前的绝对定位，因为现在在 flex 容器里了 */
-  transform: none;
-}
+
 </style>

@@ -23,10 +23,9 @@
 <script>
 export default {
   name: "toolbar",
-  computed: {
-    user() {
-      // 添加防御性检查，防止 currentUser 为 null 时报错
-      return this.$store.state.currentUser || { userProfile: '', nickname: '未知用户' };
+  data() {
+    return {
+      user: JSON.parse(window.sessionStorage.getItem('user') || '{}')
     }
   },
   methods: {
