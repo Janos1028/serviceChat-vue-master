@@ -133,19 +133,58 @@ html, body {
   font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
 }
 
-/* 注意：这个类名必须放在全局样式中（不要加 scoped），否则 Element UI 的弹窗无法读取到 */
-.chat-notification {
-  cursor: pointer !important; /* 强制显示手型 */
-  user-select: none;          /* 防止文本被选中，更像按钮 */
-  transition: all 0.2s ease;  /* 添加平滑过渡效果 */
-  border-left: 5px solid #409EFF !important; /* 左侧加一道蓝杠，增加设计感 */
+/* 1. 基础样式：针对所有弹窗 */
+.el-notification {
+  cursor: pointer !important;       /* 强制变成小手，暗示可点击 */
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important; /* 丝滑过渡 */
+  user-select: none;                /* 防止文字被选中，更像按钮/卡片 */
+
+  /* 默认给左侧加一道灰色边框，防止没有类型的弹窗太单调 */
+  border-left: 5px solid #ebeef5;
 }
 
-/* 鼠标悬停时的效果：轻微上浮 + 阴影加重 */
-.chat-notification:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15) !important;
-  background-color: #e9f6ff !important; /* 可选：悬停时微微变色 */
+/* 2. 核心互动：鼠标悬停时的“浮起”效果 */
+/* 只要是 el-notification，鼠标放上去就浮起 */
+.el-notification:hover {
+  transform: translateY(-4px) scale(1.02) !important; /* 向上浮起 + 微微放大 */
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18) !important; /* 投影加深，增加悬浮感 */
+  z-index: 9999 !important; /* 确保浮起时层级最高 */
+}
+
+/* 3. 针对不同类型的弹窗，悬停时亮起不同的颜色 */
+/* 这里的颜色对应 Element UI 的 success/warning/error/info */
+
+/* 成功 (Success) -> 绿色反馈 */
+.el-notification.success:hover {
+  border-left-color: #67C23A !important;
+  background-color: #f0f9eb !important;
+}
+
+/* 警告 (Warning) -> 橙色反馈 */
+.el-notification.warning:hover {
+  border-left-color: #E6A23C !important;
+  background-color: #fdf6ec !important;
+}
+
+/* 错误 (Error) -> 红色反馈 */
+.el-notification.error:hover {
+  border-left-color: #F56C6C !important;
+  background-color: #fef0f0 !important;
+}
+
+/* 消息 (Info) 或 聊天通知 -> 蓝色反馈 */
+.el-notification.info:hover,
+.el-notification.chat-notification:hover {
+  border-left-color: #409EFF !important;
+  background-color: #ecf5ff !important;
+}
+
+/* 4. 强制内容区域也是手型 (防止点到文字上光标变回 I 型) */
+.el-notification__group,
+.el-notification__content,
+.el-notification__title,
+.el-notification__icon {
+  cursor: pointer !important;
 }
 
 
@@ -196,20 +235,4 @@ html, body {
   }
 }
 
-.el-notification.chat-notification {
-  /* 1. 强制固定位置，覆盖 Element UI 计算出的 top 属性 */
-  top: 30px !important;
-  right: 20px !important;
-
-  /* 2. 增加层级感和阴影，看起来像扑克牌 */
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
-  border: 1px solid #ebeef5;
-
-  /* 3. 添加过渡动画，让新消息出来时更自然 */
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-
-  /* 4. (可选) 如果希望堆叠时背景不透出下面的文字，确保背景色不透明 */
-  background-color: #fff;
-  opacity: 1;
-}
 </style>

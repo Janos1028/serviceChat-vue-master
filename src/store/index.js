@@ -835,6 +835,17 @@ const store = new Vuex.Store({
                   onClick: () => {
                     // 2. 点击后立即关闭弹窗
                     notification.close();
+                    let u =null;
+                    u = context.state.users.find(u => u.conversationId === receiveMsg.conversationId);
+                    if (!u){
+                      if (currentUser.userTypeId == 0){
+                        u = context.state.users.find(u => u.username === effectiveSender);;
+                      }else {
+                        u = context.state.users.find(u => u.id === receiveMsg.fromId);
+                      }
+                    }
+
+
                     if (u) {
                       // --- 正常跳转逻辑 ---
                       context.commit('changeCurrentSession', u);
