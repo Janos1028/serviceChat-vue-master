@@ -85,28 +85,26 @@ export default {
   },
   methods: {
     handleStatusCommand(command) {
-      // 【修复】引用路径修正
+      // 引用路径修正
       if (this.user.userStateId === command) return;
-
-      reqChangeUserState(command).then(resp => {
+      let params = {
+        stateId: command
+      };
+      reqChangeUserState(params).then(resp => {
         if (resp && resp.status === 200) {
           // 更新当前视图数据
           this.user.userStateId = command;
-
           this.$message.success("状态更新成功");
-
-          // 如果您希望刷新页面后还能保持这个状态，
-          // 虽然初始化不读 session，但建议还是存一下，或者完全依赖后端（已实现）
         }
       });
     },
     initUserCard() {
       reqGetCard().then(resp => {
         if (resp) {
-          // 3. 【确认】后端返回的数据直接赋值给 user
+          // 3. 后端返回的数据直接赋值给 user
           // resp 结构是 User 对象，包含 userStateId, nickname, userProfile 等
           this.user = resp.obj;
-          
+
           console.log("卡片数据已同步，当前状态ID:", this.user.userStateId);
         }
       })

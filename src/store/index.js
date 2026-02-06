@@ -8,9 +8,8 @@ import {
   reqSupporterGetHistoryMsg,
   reqGetAllActiveSessions,
   reqGetUnreadSenders,
-  reqUpdateMsgRead,
   reqGetHistoryMsg,
-  baseUrl, reqUpdateServiceMsgRead,
+  baseUrl,
 } from "../utils/api";
 import SockJS from '../utils/sockjs'
 import '../utils/stomp'
@@ -23,7 +22,6 @@ const savedState = sessionStorage.getItem('state') ? JSON.parse(sessionStorage.g
 if (savedState) {
   savedState.stomp = null;
   savedState.isStompConnected = false;
-  savedState.sessions = {};
   // 确保清理掉可能残留的旧字段，防止干扰
   if (!savedState.sessions) savedState.sessions = {};
   if (!savedState.isDot) savedState.isDot = {};
@@ -47,7 +45,6 @@ const store = new Vuex.Store({
     RESET_STATE(state) {
       state.routes = []; state.sessions = {}; state.users = [];
       state.currentSession = null;
-      state.isChatActive = false;
       state.isDot = {}; state.stomp = null;
     },
 
@@ -115,25 +112,37 @@ const store = new Vuex.Store({
         // 1. 清除红点 (视觉)
         Vue.set(state.isDot, currentUser.username + "#" + currentSession.username, false);
 
-        // 2. 【核心新增】调用后端接口更新已读状态
-        if (currentUser.userTypeId === 1) {
-          // --- 客服端逻辑 ---
-          // 确保有真实的用户ID才调用
-          if (currentSession.id) {
-            reqUpdateMsgRead(currentSession.id);
-          }
-        } else {
-          // --- 普通用户端逻辑 ---
-          // 确保是服务号
-          if (currentSession.username.startsWith('service_')) {
-            let domainId = currentSession.serviceDomainId;
-            // 获取 staffId：如果会话已激活，currentSession.id 会被替换为真实客服ID
-            // 如果未激活，id 可能是 null，此时只传 domainId 进行批量更新
-            let staffId = currentSession.id;
+        if (state.stomp && state.stomp.connected) {
+          let payload = {
+            type: 'READ_RECEIPT',
+            from: currentUser.username,
+            to: currentSession.username // 告诉对方用于回显
+          };
 
-            if (domainId) {
-              reqUpdateServiceMsgRead(domainId, staffId);
+          // --- 分支 A: 我是客服 (UserTypeId = 1) ---
+          if (currentUser.userTypeId === 1) {
+            if (currentSession.id) {
+              // 客服逻辑：告诉后端我读了 targetId (用户) 的消息
+              payload.targetId = currentSession.id;
             }
+          }
+          // --- 分支 B: 我是普通用户 (UserTypeId = 0) ---
+          else {
+            if (currentSession.username.startsWith('service_')) {
+              let domainId = currentSession.serviceDomainId;
+              let staffId = currentSession.id; // 如果已连接，这就是真实客服ID
+
+              if (domainId) {
+                // 用户逻辑：告诉后端我读了 domainId 下 staffId 的消息
+                payload.domainId = domainId;
+                if (staffId) payload.staffId = staffId;
+              }
+            }
+          }
+
+          // 只有当参数有效时才发送
+          if (payload.targetId || payload.domainId) {
+            state.stomp.send("/app/chat/read", {}, JSON.stringify(payload));
           }
         }
 
@@ -208,18 +217,60 @@ const store = new Vuex.Store({
     },
     addMessage(state, msg) {
       let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
+
+      const handleNotificationClick = () => {
+        let targetUser = null;
+
+        //  场景1: 我是普通用户 -> 找服务号 (根据 serviceDomainId 或 conversationId)
+        if (currentUser.userTypeId !== 1) {
+          // 优先尝试：通过 conversationId 找 (最准，因为它是唯一的)
+          if (msg.conversationId) {
+            targetUser = state.users.find(u => u.conversationId === msg.conversationId);
+          }
+          // 兜底尝试：如果消息里带了 serviceDomainId，拼凑 service_X 去找
+          if (!targetUser && msg.serviceDomainId) {
+            let serviceDomainId = msg.serviceDomainId;
+            targetUser = state.users.find(u => u.serviceDomainId === serviceDomainId);
+          }
+        }
+        // 🔵 场景2: 我是客服 -> 找具体用户 (根据 fromId)
+        else {
+          // 这里的 msg.fromId 是发送反馈的用户ID
+          if (msg.fromId) {
+            targetUser = state.users.find(u => u.id == msg.fromId);
+          }
+        }
+
+        // --- 执行跳转 ---
+        if (targetUser) {
+          // 1. 切换会话
+          store.commit('changeCurrentSession', targetUser);
+
+          // 2. 强制刷新历史记录 (防止假死)
+          // 必须通过 store.dispatch 调用，因为这里是 mutation 内部
+          store.dispatch('loadPrivateHistory', { toUser: targetUser, page: 1 });
+
+        } else {
+          console.warn("无法找到跳转目标，Message:", msg);
+        }
+      };
+
       if (msg.messageTypeId === 7) {
 
         // 1. 【场景：客服发起 -> 通知用户】
         // 如果我是普通用户 (userTypeId != 1)，且收到 state=2 (客服发起了结束申请)
         if (currentUser && currentUser.userTypeId !== 1) {
           if (msg.state === 2) {
-            Notification.warning({
+            let notify = Notification.warning({
               title: '服务确认',
               message: '【'+msg.fromNickname+'客服】已发起服务结束申请，请您确认问题是否已解决。',
               duration: 0, // 设置为 0 则不会自动关闭，需要用户手动点叉，避免漏看
               position: 'top-right',
               zIndex: 9999,
+              onClick: () => {
+                notify.close(); // 关闭弹窗
+                handleNotificationClick(); // 执行跳转
+              }
             });
           }
         }
@@ -230,20 +281,29 @@ const store = new Vuex.Store({
 
           // 用户点击了“已解决”
           if (msg.state === 3) {
-            Notification.success({
+            let notify = Notification.success({
               title: '服务结束',
               message: '用户【'+msg.userNickName+'】已确认问题解决，本次服务结束。',
-              duration: 5000 // 5秒后自动消失
+              duration: 5000, // 5秒后自动消失
+              onClick: () => {
+                notify.close(); // 关闭弹窗
+                handleNotificationClick(); // 执行跳转
+              }
             });
+
           }
 
           // 用户点击了“未解决”
           else if (msg.state === 4) {
-            Notification.error({
+            let notify = Notification.error({
               title: '用户反馈',
               message: '用户【'+msg.userNickName+'】反馈问题未解决，请继续跟进！',
               duration: 0, // 不自动关闭，直到客服看到
               zIndex: 9999,
+              onClick: () => {
+                notify.close(); // 关闭弹窗
+                handleNotificationClick(); // 执行跳转
+              }
             });
           }
         }
@@ -261,30 +321,22 @@ const store = new Vuex.Store({
             duration: 0,
             zIndex: 9999,  // 确保在最上层
             onClick: () => {
-              // 1. 根据消息中的 conversationId 查找对应的聊天对象
-              // msg.conversationId 是后端 sendPrivateSystemMessage 时带上的
-              if (msg.conversationId) {
-                let targetUser = state.users.find(u => u.conversationId === msg.conversationId);
-                if (!targetUser) {
-                  // 假设 msg.to 是当前用户，那么 msg.fromName (或 context) 可能是服务号
-                  // 或者直接遍历 users，找到那个正在聊天的服务号 (conversationId 不为空的那个)
+              let targetUser=null;
+              if (msg.userTypeId==0){
+                targetUser = state.users.find(u => u.serviceDomainId === msg.serviceDomainId);
+              }else {
+                targetUser = state.users.find(u => u.id === msg.otherUserId);
+              }
 
-                  // 策略 A: 找当前 users 里所有 conversationId 不为空的对象
-                  // (通常普通用户同时只能和一个客服聊天，所以有 conversationId 的大概率就是它)
-                  targetUser = state.users.find(u => u.conversationId);
-
-                  // 策略 B: 如果后端消息里带了服务号的 username (比如 service_1)
-                  // 你可以检查 msg 的 extra info，或者根据业务逻辑硬找
-                }
-                if (targetUser) {
+              if (targetUser) {
                   // 2. 切换当前会话
                   store.commit('changeCurrentSession', targetUser);
                   // 3. (可选) 如果有路由，确保跳转到聊天页 (视你的路由结构而定)
                   // router.push('/chat');
                 } else {
-                  console.warn("未找到该会话对应的用户，conversationId:", msg.conversationId);
+                  console.warn("未找到该会话对应的用户");
                 }
-              }
+
               // 4. 点击后关闭弹窗
               notify.close();
             }
@@ -292,45 +344,51 @@ const store = new Vuex.Store({
         }
       }
       // 这里的 msg 已经在 connect 中被修正过 from 了，所以 key 生成是正确的
-      let key = currentUser.username + "#" + msg.to;
-      if (!state.sessions[key]) Vue.set(state.sessions, key, []);
-      console.log("这是msg：", msg)
-      if (msg.id) {
-        // 使用 loose equality (==) 而不是 (===)，允许 '1897' == 1897
-        let existingMsg = state.sessions[key].find(m => m.id == msg.id);
+      let partnerUsername = (msg.from === currentUser.username) ? msg.to : msg.from;
+      let key = currentUser.username + "#" + partnerUsername;
+
+      // 2. 【核心判断】这条消息属于当前正在打开的窗口吗？
+      // 只有当前窗口才配存入 sessions
+      let isCurrentChat = state.currentSession && (state.currentSession.username === msg.to || state.currentSession.username === msg.from);
+
+      // 3. 【场景A：正在聊天】存入内存
+      if (isCurrentChat) {
+        if (!state.sessions[key]) Vue.set(state.sessions, key, []);
+
+        // 查重逻辑 (防止重复添加)
+        let existingMsg = null;
+        if (msg.id) {
+          existingMsg = state.sessions[key].find(m => m.id == msg.id);
+        }
 
         if (existingMsg) {
-          // console.log(" -> 发现已存在消息，执行更新:", existingMsg.id);
-
-          // 更新内容
+          // 已存在则更新，不Push
           if (msg.content) existingMsg.content = msg.content;
-
-          // 更新状态 (确保类型安全)
-          if (msg.state !== undefined && msg.state !== null) {
-            existingMsg.state = Number(msg.state);
-          }
-          if (msg.score !== undefined) {
-            existingMsg.score = Number(msg.score);
-          }
-
-          return; // ⛔️ 找到了就直接返回，千万不要往下执行 push！
+          if (msg.state !== undefined) existingMsg.state = Number(msg.state);
+          return;
         }
+
+        // Push 新消息
+        state.sessions[key].push({
+          id: msg.id,
+          content: msg.content,
+          date: msg.createTime || new Date(),
+          fromNickname: msg.fromNickname,
+          messageTypeId: msg.messageTypeId,
+          self: !msg.notSelf,
+          state: msg.state || 0,
+          fromProfile: msg.fromProfile,
+          conversationId: msg.conversationId,
+          score: msg.score
+        });
       }
-      state.sessions[key].push({
-        id: msg.id, // 补上 ID
-        content: msg.content,
-        date: msg.createTime || new Date(),
-        fromNickname: msg.fromNickname,
-        messageTypeId: msg.messageTypeId,
-        self: !msg.notSelf,
-        state: msg.state || 0,
-        fromProfile: msg.fromProfile,
-        conversationId: msg.conversationId,
-        score: msg.score
-      })
-      state.sessions = { ...state.sessions };
-      let targetUser = state.users.find(u => u.username === msg.to);
-      if (targetUser) Vue.set(targetUser, 'lastMessageTime', msg.createTime || new Date());
+
+      // 4. 【必须执行】更新用户列表的“最后消息时间”
+      // 因为后台消息不存 sessions，列表排序全靠这个字段！
+      let targetUser = state.users.find(u => u.username === partnerUsername); // 确保找到正确的用户对象
+      if (targetUser) {
+        Vue.set(targetUser, 'lastMessageTime', msg.createTime || new Date());
+      }
     },
     MARK_SESSION_READ(state, readerUsername) {
       let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
@@ -430,10 +488,6 @@ const store = new Vuex.Store({
 
       // 3. 还原身份状态
       Vue.set(state.currentSession, 'isReceptionist', true);
-
-
-      // 5. 关闭聊天激活状态
-      state.isChatActive = false;
     },
 
     // 立即更新当前会话的客服信息
@@ -507,7 +561,8 @@ const store = new Vuex.Store({
                 userStateId: 1,
                 // 如果旧对象里有这些 ID，就继承过来，否则设为 null
                 conversationId: oldUser ? oldUser.conversationId : null,
-                id: oldUser ? oldUser.id : null
+                id: oldUser ? oldUser.id : null,
+                lastMessageTime: oldUser ? oldUser.lastMessageTime : null
               };
             });
             context.commit('INIT_USER_LIST', domainUsers);
@@ -544,8 +599,12 @@ const store = new Vuex.Store({
     },
 
     startPrivateChat({ commit, state }, { domainId: domainId, serviceId, serviceName }) {
+      let params={
+         domainId: domainId,
+        serviceId: serviceId
+      }
       // 调用 API (注意 api.js 里参数顺序要对)
-      return reqStartPrivateChat(domainId, serviceId).then(resp => {
+      return reqStartPrivateChat(params).then(resp => {
         if (resp && resp.status === 200) {
           // resp.obj 是 ConversationStartVO
           // 结构: { conversationId: "...", domainId: 1, userId: 123 }
@@ -576,7 +635,10 @@ const store = new Vuex.Store({
 
     endPrivateChat({ commit, state }) {
       if (!state.currentConversationId) return;
-      return reqClosePrivateChat(state.currentConversationId).then(resp => {
+      let params= {
+        conversationId: state.currentConversationId
+      };
+      return reqClosePrivateChat(params).then(resp => {
         if (resp && resp.status === 200) {
           commit('SET_CHAT_ACTIVE', { conversationId: null, isActive: false, username: state.currentSession.username });
         }
@@ -584,6 +646,9 @@ const store = new Vuex.Store({
     },
 
     async loadPrivateHistory({ commit, state }, { toUser, page = 1, size = 20 }) {
+      if (page === 1) {
+        state.sessions = {};
+      }
       let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
       if (!toUser) return 0;
 
@@ -682,7 +747,7 @@ const store = new Vuex.Store({
             if (!senderUser && currentUser.userTypeId === 1) {
 
               // 1. 安全校验：如果没有 ID 或 用户名，绝对不添加 (防止添加幽灵数据)
-              if (!receiveMsg.fromId || !receiveMsg.from) {
+              if (!receiveMsg.fromId) {
                 console.warn("[AutoAdd] 消息缺少关键身份信息，跳过自动添加:", receiveMsg);
               } else {
                 let newUser = {
@@ -723,12 +788,12 @@ const store = new Vuex.Store({
             // B. 普通用户逻辑：关键路由映射
             if (currentUser.userTypeId !== 1) {
               let mappedService = null;
-
+              let targetUser = context.state.users.find(u => u.conversationId === receiveMsg.conversationId);
               // 1. 优先尝试：通过 conversationId 查找映射 (最准确)
               // 这能解决“打招呼”消息和 START 信号时序不一致的问题
               if (receiveMsg.conversationId) {
                 // 遍历所有用户(服务号)，看谁拿着这个 conversationId
-                let targetUser = context.state.users.find(u => u.conversationId === receiveMsg.conversationId);
+
                 if (targetUser) {
                   mappedService = targetUser.username;
                 }
@@ -744,27 +809,25 @@ const store = new Vuex.Store({
 
               // 3. 执行“路由劫持”
               if (mappedService) {
-                receiveMsg.realFromId = receiveMsg.fromId; // 暂时保留 ID 用于回执
                 receiveMsg.from = mappedService;           // 修改为虚拟号
 
                 // 强制修正昵称和头像为“当前服务号”的信息
                 // 这样无论后端发来的是谁，前端都只显示"服务中心"
-                if (context.state.currentSession && context.state.currentSession.username === mappedService) {
-                  receiveMsg.fromNickname = context.state.currentSession.nickname;
-                  receiveMsg.fromProfile = context.state.currentSession.userProfile;
+                if (context.state.currentSession && targetUser!=null) {
+                  receiveMsg.fromNickname = targetUser.nickname;
+                  receiveMsg.fromProfile = targetUser.userProfile;
                 }
               }
             }
 
             let effectiveSender = receiveMsg.from;
             let isChattingWithSender = context.state.currentSession && context.state.currentSession.username === effectiveSender;
-
             if (!isChattingWithSender) {
               new Audio(notifySound).play().catch(()=>{});
 
               if (!receiveMsg.messageTypeId || receiveMsg.messageTypeId <= 3) {
                 let notification = Notification.info({
-                  title: '【' + (receiveMsg.fromNickname || effectiveSender) + '】发来消息',
+                  title: '【' + receiveMsg.fromNickname + '】发来消息',
                   message: receiveMsg.content,
                   position: "top-right",
                   duration: 3000,
@@ -772,39 +835,37 @@ const store = new Vuex.Store({
                   onClick: () => {
                     // 2. 点击后立即关闭弹窗
                     notification.close();
-                    let u = context.state.users.find(u => u.username === effectiveSender);
-                    if(u) {
+                    if (u) {
+                      // --- 正常跳转逻辑 ---
                       context.commit('changeCurrentSession', u);
-                      if(u.username !== '群聊') context.dispatch('loadPrivateHistory', { toUser: u, page: 1 });
+                      if (u.username !== '群聊') context.dispatch('loadPrivateHistory', { toUser: u, page: 1 });
 
-                      // 4. Mutation: 立即把本地内存中的消息标为已读 (红点消失，状态更新)
+                      // 前端：红点消失
                       context.commit('MARK_SESSION_READ', u.username);
 
-                      // 5. WebSocket: 发送回执给对方 (对方界面显示"已读")
+                      // 后端：发送 WebSocket 已读回执 (同时更新数据库)
                       if (context.state.stomp && context.state.stomp.connected) {
-                        context.state.stomp.send("/app/chat/read", {}, JSON.stringify({
-                          to: receiveMsg.realFrom || receiveMsg.from,
+                        let payload = {
+                          to: receiveMsg.from,
                           from: currentUser.username,
                           type: 'READ_RECEIPT'
-                        }));
-                      }
-                    }else {
-                      // 2. 【关键修复】如果用户不在列表里（极少数情况，如新服务号）
-                      // 我们需要手动调用新接口，而不是旧接口
-                      if (currentUser.userTypeId !== 1) {
-                        // 普通用户：尝试从消息中获取 domainId (如果消息里没带，可能需要后端配合，或者前端无法更新)
-                        // 但通常 Notification 是针对 domain 的，receiveMsg.from 已经被改为 service_X
-                        // 我们可以尝试解析 service_X 得到 domainId
-                        let domainId = null;
-                        if (effectiveSender.startsWith('service_')) {
-                          domainId = effectiveSender.split('_')[1];
+                        };
+
+                        // ✅ 【关键修正】补全参数，确保后端能更新数据库
+                        if (currentUser.userTypeId === 1) {
+                          // 我是客服：读了用户(fromId)的消息
+                          if (receiveMsg.fromId) payload.targetId = receiveMsg.fromId;
+                        } else {
+                          // 我是用户：读了服务域的消息
+                          // 从 u 对象里拿 domainId (因为 u 肯定存在)
+                          if (u.serviceDomainId) {
+                            payload.domainId = u.serviceDomainId;
+                            // 如果消息带了具体客服ID，也带上
+                            if (receiveMsg.fromId) payload.staffId = receiveMsg.fromId;
+                          }
                         }
-                        if (domainId) {
-                          reqUpdateServiceMsgRead(domainId, receiveMsg.fromId);
-                        }
-                      } else {
-                        // 客服：调用旧接口
-                        if (receiveMsg.fromId) reqUpdateMsgRead(receiveMsg.fromId);
+
+                        context.state.stomp.send("/app/chat/read", {}, JSON.stringify(payload));
                       }
                     }
                   }
@@ -812,31 +873,30 @@ const store = new Vuex.Store({
               }
               Vue.set(context.state.isDot, currentUser.username + "#" + effectiveSender, true);
             } else {
-
-
               if (context.state.stomp && context.state.stomp.connected) {
-                context.state.stomp.send("/app/chat/read", {}, JSON.stringify({
-                  // 【修改点】：确保发给“真实”的发送者账号。
-                  // 如果 receiveMsg 中带了 realFrom（客服真实工号），则优先发给它。
-                  to: receiveMsg.realFrom || receiveMsg.from,
+                let payload = {
+                  to: receiveMsg.from,
                   from: currentUser.username,
                   type: 'READ_RECEIPT'
-                }));
-              }
+                };
 
-              // 解决问题：防止刷新后消息变回未读，或红点状态不同步
-              if (currentUser.userTypeId === 1) {
-                // 客服端：维持原状 (按用户ID更新)
-                if (receiveMsg.fromId) reqUpdateMsgRead(receiveMsg.fromId);
-              } else {
-                // 普通用户端：调用新接口 (domainId + 真实 staffId)
-                let domainId = context.state.currentSession.serviceDomainId;
-                let realStaffId = receiveMsg.fromId;
-
-                // 只有当两个参数都有值时才发送
-                if (domainId && realStaffId) {
-                  reqUpdateServiceMsgRead(domainId, realStaffId);
+                if (currentUser.userTypeId === 1) {
+                  // 我是客服：读了用户(fromId)的消息
+                  if (receiveMsg.fromId) payload.targetId = receiveMsg.fromId;
+                } else {
+                  // 我是用户：读了服务域的消息
+                  // 注意：receiveMsg.from 已经被你上面的逻辑改成了 service_X，无法直接取 domainId
+                  // 必须从 currentSession 取，或者从 effectiveSender 解析
+                  let domainId = context.state.currentSession.serviceDomainId;
+                  let realStaffId = receiveMsg.fromId;
+                  if (domainId) {
+                    payload.domainId = domainId;
+                    if (realStaffId) payload.staffId = realStaffId;
+                  }
                 }
+
+                // 发送携带完整参数的包
+                context.state.stomp.send("/app/chat/read", {}, JSON.stringify(payload));
               }
 
               if (receiveMsg.messageTypeId !== 7) {
@@ -884,8 +944,6 @@ const store = new Vuex.Store({
             }
           } else {
             receiveMsg.notSelf = true;
-            // 【关键修复 3】to 必须等于 from (已被篡改为 service_x)
-            receiveMsg.to = receiveMsg.from;
           }
           context.commit('addMessage', receiveMsg);
         });

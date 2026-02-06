@@ -8,7 +8,7 @@ axios.defaults.baseURL = baseUrl; // 设置 axios 默认前缀
 axios.defaults.withCredentials = true;
 let isReloginMessageShown = false;
 
-// 【新增】统一的重置状态与跳转方法
+// 统一的重置状态与跳转方法
 const resetLoginState = () => {
     // 1. 清除所有相关的缓存
     window.sessionStorage.removeItem("user");
@@ -151,53 +151,49 @@ export const reqUserLogin = (data) => postRequest('/user/login', data);
 export const reqUserRegister = (data) => postRequest('/user/register', data);
 export const reqUserLogout = () => getRequest('/user/logout');
 // 验证相关
-export const reqVerifyCode = () => getRequest('/verifyCode');
-export const reqGetMailVerifyCode = () => getRequest('/mailVerifyCode');
 export const reqCheckUsername = (username) => getRequest('/user/checkUsername', {username});
 export const reqCheckNickname = (nickname) => getRequest('/user/checkNickname', {nickname});
 
-export const reqLogout = () => getRequest('/login/logout');
 
-// 2. 管理员相关
+/*// 2. 管理员相关（目前不用）
 export const reqAdminLogin = (params) => postRequest('/admin/login', params);
 export const reqAdminLogout = () => getRequest('/admin/logout');
-
-
-// 3. 管理端用户管理
+// 3. 管理端用户管理（目前不用）
 export const reqGetAllUsersByPage = (params) => getRequest('/admin/getAllUserByPage', params);
 export const reqUpdateUserStatus = (params) => putRequest(`/admin/changeLockedStatus?id=${id}&isLocked=${isLocked}`, params);
 export const reqDeleteUser = (id) => deleteRequest(`/admin/${id}`);
 export const reqDeleteUserByIds = (params) => deleteRequest('/admin/', params);
-// 用户端状态获取和管理
-export const reqChangeUserState = (stateId) => postRequest(`/user/supporter/changeUserState?stateId=${stateId}`);
-export const reqGetCard = () => getRequest(`/user/getCard`);
-// 5. 群聊消息管理
 export const reqGetGroupMsgLogs = (params) => getRequest('/admin/GroupMsgContent/getAllGroupMsgContentByPage', params);
 export const reqDeleteGroupMsgById = (id) => deleteRequest(`/admin/GroupMsgContent/deleteGroupMsgContentById/${id}`);
 export const reqDeleteGroupMsgByIds = (params) => deleteRequest('/admin/GroupMsgContent/deleteGroupMsgContentByIds', params);
+// 8. 其他
+export const reqGetPrivateMsgLogs = (params) => getRequest('/admin/privateMsg/list', params);*/
 
-// 6. 聊天相关
+// 用户端状态获取和管理
+export const reqChangeUserState = (params) => postRequest(`/user/supporter/changeUserState`,null, params);
+export const reqGetCard = () => getRequest(`/user/getCard`);
+// 聊天相关
 export const reqGetRecentConversation = () => getRequest('/user/chat/getRecentConversation');
 export const reqGetSupportServiceCategories = (domainId) => getRequest('/user/chat/getSupportServiceCategories', {domainId});
 export const reqGetServiceDomains = () => getRequest('/user/chat/getServiceDomains');
 // 注意：后端使用 @RequestParam，为了稳妥，我们这里直接拼接到URL上，或者使用 params 对象
-export const reqClosePrivateChat = (conversationId,messageId) => postRequest(`/user/private/close?conversationId=${conversationId}&messageId=${messageId}`);
-export const reqSupporterGetHistoryMsg = (params) => getRequest('/user/private/supporterGetHistoryMsg', params);
+export const reqClosePrivateChat = (params) => postRequest(`/user/private/close`,null,params);
+export const reqSupporterGetHistoryMsg = (params) => getRequest('/user/private/supporterGetHistoryMsg', params,null,params);
 export const reqGetHistoryMsg = (params) => getRequest('/user/private/getHistoryMsg', params);
 // export const reqGetPrivateChatStatus = (toId) => getRequest('/user/private/status', {toId});
 export const reqGetAllActiveSessions = () => getRequest('/user/private/active_sessions');
 // 获取发送了未读消息的用户ID列表 (用于登录初始化红点)
 export const reqGetUnreadSenders = () => getRequest('/user/private/getUnreadSenders');
 // 更新已读了某人的消息
-export const reqUpdateMsgRead = (fromId) => postRequest(`/user/private/updateMsgStateToRead?fromId=${fromId}`);
+export const reqUpdateMsgRead = (params) => postRequest(`/user/private/updateMsgStateToRead`,null, params);
 // 开启人工服务会话
-export const reqStartPrivateChat = (domainId, serviceId) => postRequest(`/user/private/start?domainId=${domainId}&serviceId=${serviceId}`);
+export const reqStartPrivateChat = (params) => postRequest(`/user/private/start`,null,params);
 // 客服请求结束会话（发起确认申请，状态转为3）
-export const reqRequestClosePrivateChat = (conversationId,isActive) => postRequest(`/user/private/requestClose?conversationId=${conversationId}&isActive=${isActive}`);
+export const reqRequestClosePrivateChat = (params) => postRequest(`/user/private/requestClose`,null,params);
 // 客服请求结束会话（发起确认申请，状态转为4）
 export const reqForceClosePrivateChat = (params) => postRequest(`/user/private/forceClose`,null, params);
 // 用户点击“未解决”（恢复会话，状态转为1）
-export const reqConfirmUnsolved = (conversationId,messageId) => postRequest(`/user/private/confirmUnsolved?conversationId=${conversationId}&messageId=${messageId}`);
+export const reqConfirmUnsolved = (params) => postRequest(`/user/private/confirmUnsolved`,null,params);
 export const reqUpdateServiceMsgRead = (domainId, staffId) => {
     let url = `/user/private/updateServiceMsgRead?domainId=${domainId}`;
     if (staffId) {
@@ -209,11 +205,10 @@ export const reqUpdateServiceMsgRead = (domainId, staffId) => {
 export const reqTransferChat = (params) => {
     return postRequest(`/user/private/transfer`,null,params);
 }
-export const reqSubmitScore = (conversationId, score) => {
-    return postRequest(`/user/private/submitScore?conversationId=${conversationId}&score=${score}`);
+export const reqSubmitScore = (params) => {
+    return postRequest(`/user/private/submitScore`,null,params);
 }
 // 7. 文件上传
 export const reqUploadFile = (params) => postRequest('/user/file', params);
 export const reqOssFileUpload = (params) => postRequest('/user/ossFileUpload', params);
-// 8. 其他
-export const reqGetPrivateMsgLogs = (params) => getRequest('/admin/privateMsg/list', params);
+

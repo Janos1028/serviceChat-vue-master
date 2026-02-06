@@ -30,8 +30,6 @@ npm install
 # 或者使用淘宝镜像加速
 npm install --registry=[https://registry.npmmirror.com](https://registry.npmmirror.com)
 如果遇到**Sass**相关报错，通常是Node版本过高，需要降级**Node.js**到v14，或者卸载重装Sass依赖。
-### 2. 配置后端地址
-修改本地运行的后端url文件：.env.development以及服务器运行的.env.production
 
 ## 项目主要目录
 src
@@ -49,3 +47,30 @@ src
 │   └── chat        # 聊天室主界面
 ├── App.vue         # 根组件
 └── main.js         # 入口文件
+```
+
+### 2.配置后端运行url
+
+```
+.env.development------为本地运行的后端url；
+
+.env.production------为服务器运行的后端url；
+```
+
+
+
+### 3.配置本地前端运行url
+
+```
+vue.congif.js------其中的module.exports进行配置
+```
+
+## 打包部署
+
+运行
+
+```bash
+run build:prod
+```
+
+生成的dist文件，将里面的所有文件及文件夹覆盖到服务器中的**serviceChatWeb**文件夹中。

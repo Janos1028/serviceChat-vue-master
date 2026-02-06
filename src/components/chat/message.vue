@@ -327,8 +327,11 @@ export default {
         cancelButtonText: '取消',
         type: 'success'
       }).then(() => {
-
-        reqClosePrivateChat(conversationId, entry.id).then(resp => {
+        let params = {
+          conversationId: conversationId,
+          messageId: entry.id
+        };
+        reqClosePrivateChat(params).then(resp => {
           if (resp && resp.status === 200) {
             this.$set(entry, 'state', 3);
           }
@@ -345,7 +348,11 @@ export default {
         this.$message.error("当前会话已关闭");
         return;
       }
-      reqConfirmUnsolved(conversationId, entry.id ).then(resp => {
+      let params = {
+        conversationId: conversationId,
+        messageId: entry.id
+      };
+      reqConfirmUnsolved(params).then(resp => {
         if (resp && resp.status === 200) {
           this.$set(entry, 'state', 4); // 更新本地视图
         }
@@ -427,7 +434,11 @@ export default {
       const score = this.tempScores[finalId];
       if (!score) return;
 
-      reqSubmitScore(finalId, score).then(resp => {
+      let params = {
+        conversationId: finalId,
+        score: score
+      };
+      reqSubmitScore(params).then(resp => {
         if (resp && resp.status === 200) {
           // 提交成功后，修改本地数据，卡片立马变身“只读”状态
           this.$set(entry, 'score', score);
@@ -725,6 +736,8 @@ export default {
 
 .text {
   margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .limit-tip {

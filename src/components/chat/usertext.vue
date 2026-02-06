@@ -5,11 +5,11 @@
       <div class="chat-toolbar">
 
         <div class="toolbar-left">
-          <div class="tool-btn"
+<!--          <div class="tool-btn"
                v-popover:emojiPopover
                title="插入表情">
             <svg class="icon emoji-icon" viewBox="0 0 1024 1024" width="24" height="24"><path d="M512 85.333333c235.648 0 426.666667 191.018667 426.666667 426.666667s-191.018667 426.666667-426.666667 426.666667S85.333333 747.648 85.333333 512 276.352 85.333333 512 85.333333z m0 64C311.808 149.333333 149.333333 311.808 149.333333 512s162.474667 362.666667 362.666667 362.666667 362.666667-162.474667 362.666667-362.666667S712.192 149.333333 512 149.333333z m-106.666667 234.666667a42.666667 42.666667 0 1 1 0 85.333333 42.666667 42.666667 0 0 1 0-85.333333z m213.333334 0a42.666667 42.666667 0 1 1 0 85.333333 42.666667 42.666667 0 0 1 0-85.333333z m-106.666667 213.333333c86.4 0 161.706667 52.266667 195.84 128H290.816c34.133333-75.733333 109.44-128 195.84-128z" p-id="2567"></path></svg>
-          </div>
+          </div>-->
 
           <el-upload
               class="upload-wrapper"
@@ -75,7 +75,9 @@
           </el-button>
         </div>
 
-        <el-popover
+<!--
+        这是emoji相关的代码，由于需要修改数据库表的配置，暂时去掉
+          <el-popover
             ref="emojiPopover"
             placement="top-start"
             width="320"
@@ -84,9 +86,11 @@
             :disabled="!isChatActive"
             popper-class="emoji-popper">
           <div class="emoji-list">
-            <div class="emoji-item" v-for="(item, i) in emotions" :key="i" @click="addEmotion(item)">{{item}}</div>
+            <div class="emoji-item" v-for="(item, i) in emotions" :key="i" @click="addEmotion(item.char)">
+              {{ item.char }}
+            </div>
           </div>
-        </el-popover>
+        </el-popover>-->
       </div>
 
       <div class="textarea-wrapper">
@@ -99,18 +103,7 @@
         </textarea>
       </div>
 
-      <div class="chat-footer">
-        <span class="tip-text" v-if="isChatActive">按 Enter 发送，Shift + Enter 换行</span>
-        <el-button
-            type="primary"
-            size="small"
-            class="send-btn"
-            :disabled="!isChatActive"
-            @click="addMessageByClick"
-        >
-          发送
-        </el-button>
-      </div>
+
       <el-dialog
           title="转接服务"
           :visible.sync="transferDialogVisible"
@@ -145,7 +138,21 @@
           <el-button type="primary" @click="confirmTransfer" :loading="transferLoading" size="small">确认转接</el-button>
         </span>
       </el-dialog>
+
+      <div class="chat-footer">
+        <span class="tip-text" v-if="isChatActive">按 Enter 发送</span>
+        <el-button
+            type="primary"
+            size="small"
+            class="send-btn"
+            :disabled="!isChatActive"
+            @click="addMessageByClick"
+        >
+          发送
+        </el-button>
+      </div>
     </div>
+
   </div>
 </template>
 
@@ -170,13 +177,14 @@ export default {
       transferLoading: false,
       transferServiceList: [],
       selectedTransferServiceId: null,
-      currentUser: JSON.parse(window.sessionStorage.getItem('user') || '{}')
+      currentUser: JSON.parse(window.sessionStorage.getItem('user') || '{}'),
+      screenWidth: document.body.clientWidth
     }
   },
   computed: {
     ...mapState(['sessions', 'currentSession']),
     isChatActive() {
-      return this.currentSession && !!this.currentSession.conversationId;
+      return this.currentSession && this.currentSession.conversationId;
     },
     dialogWidth() {
       return this.screenWidth < 768 ? '80%' : '400px';
@@ -369,7 +377,11 @@ export default {
         type: 'warning'
       }).then(() => {
         let isActive = 3;
-        reqRequestClosePrivateChat(this.currentSession.conversationId, isActive);
+        let params = {
+          conversationId: this.currentSession.conversationId,
+          isActive: isActive
+        }
+        reqRequestClosePrivateChat(params);
         // 注意：后续状态清理会在 store 的 actions.endPrivateChat 里自动完成
       }).catch(() => {
       });
@@ -485,6 +497,7 @@ export default {
     padding: 0 16px;
     display: flex;
     align-items: center;
+    flex-shrink: 0;
     /*border-bottom: 1px solid #f0f0f0;  分割线*/
   }
 
@@ -598,6 +611,11 @@ export default {
     justify-content: flex-end;
     align-items: center;
     padding: 0 16px;
+    /* ✅ 新增：核心修复代码！防止被中间的输入框挤没了 */
+    flex-shrink: 0;
+
+    /* ✅ 建议新增：给个背景色，确保层级正确 */
+    background-color: #fff;
   }
 
   .tip-text {

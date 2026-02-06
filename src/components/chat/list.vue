@@ -72,24 +72,11 @@ export default {
           if (!a.isReceptionist && b.isReceptionist) return 1;
         }
 
-        // 规则B: 按最后一条消息时间降序
-        let keyA = this.currentUser.username + '#' + a.username;
-        let keyB = this.currentUser.username + '#' + b.username;
-        let msgsA = this.sessions[keyA];
-        let msgsB = this.sessions[keyB];
-
-        let timeA = (msgsA && msgsA.length > 0) ? new Date(msgsA[msgsA.length - 1].date).getTime() : 0;
-        let timeB = (msgsB && msgsB.length > 0) ? new Date(msgsB[msgsB.length - 1].date).getTime() : 0;
-
-        if (timeA === 0 && a.lastMessageTime) {
-          timeA = new Date(a.lastMessageTime).getTime();
-        }
-        if (timeB === 0 && b.lastMessageTime) {
-          timeB = new Date(b.lastMessageTime).getTime();
-        }
+        let timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
+        let timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
 
         if (timeA > 0 || timeB > 0) {
-          return timeB - timeA; // 降序排列：时间大的在前
+          return timeB - timeA; // 降序：时间越晚越靠前
         }
 
         // 规则C: 在线的排在前面
@@ -105,7 +92,23 @@ export default {
         this.handleItemCheckChange();
         return;
       }
+
+      // 1. 判断是否点击了“当前正在聊天的用户”
+      // 注意：这里要在 commit 之前判断
+      let isSameUser = this.currentSession && this.currentSession.username === currentSession.username;
+
+      // 2. 提交变更（这步保持不变，用于更新选中高亮状态）
       this.$store.commit('changeCurrentSession', currentSession);
+
+      // 3. 如果是同一个人，手动强制刷新历史记录
+      // 因为 state 没变，ChatWindow 里的 watcher 不会触发，所以我们要在这里手动触发
+      if (isSameUser) {
+        console.log("点击了当前会话，强制刷新历史记录...");
+        this.$store.dispatch('loadPrivateHistory', {
+          toUser: currentSession,
+          page: 1
+        });
+      }
     },
 
     handleItemCheckChange() { let checkedCount = this.users.filter(u => u.checked).length; this.checkAll = checkedCount === this.users.length && this.users.length > 0; this.isIndeterminate = checkedCount > 0 && checkedCount < this.users.length; },

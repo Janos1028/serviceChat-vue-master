@@ -228,7 +228,7 @@ export default {
     },
     handleBeforeUnload() {
       let stateToSave = JSON.parse(JSON.stringify(this.$store.state));
-      delete stateToSave.sessions;
+
       delete stateToSave.stomp;
       delete stateToSave.isStompConnected;
       sessionStorage.setItem("state", JSON.stringify(stateToSave));
@@ -437,7 +437,8 @@ export default {
 /* A. 聊天主体 */
 .chat-main {
   width: 100%;
-  height: 100%;
+  flex: 1;
+  overflow: hidden; /* 防止内部子元素意外撑开 */
   display: flex;
   flex-direction: column;
 }
