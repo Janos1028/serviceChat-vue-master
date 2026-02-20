@@ -5,6 +5,10 @@
 基于 **Vue 2.x** + **Element UI** 构建，实现了用户/管理员登录、即时通讯（私聊/群聊）、消息通知、后台管理等功能。
 通讯协议采用 **WebSocket** (SockJS + STOMP) 实现低延迟交互。
 
+**前端源码：**https://gitee.com/janos1028/service-chat_vue
+
+**后端源码：**https://gitee.com/janos1028/service-chat_back
+
 ## ✨ 核心功能特性
 
 本项目不仅仅是一个基础的即时通讯工具，而是完整复刻了企业级客服系统的业务流转和状态管理，主要包含以下核心功能模块：
