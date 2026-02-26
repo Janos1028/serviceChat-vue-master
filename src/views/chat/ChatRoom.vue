@@ -34,29 +34,29 @@
           <chattitle></chattitle>
         </div>
         <div v-if="currentSession" class="chat-main">
-        <div class="message-area" id="chat-messages" @scroll="onScroll">
+          <div class="message-area" id="chat-messages" @scroll="onScroll">
 
-          <div v-if="isLoading" class="loading-tip">
-            <i class="el-icon-loading"></i> 正在加载历史消息...
+            <div v-if="isLoading" class="loading-tip">
+              <i class="el-icon-loading"></i> 正在加载历史消息...
+            </div>
+
+            <message></message>
           </div>
+          <transition name="el-fade-in">
+            <div
+                v-if="newMsgCount > 0"
+                class="new-msg-tip"
+                @click="goToBottom"
+            >
+              <i class="el-icon-arrow-down"></i>
+              <span>{{ newMsgCount }} 条新消息</span>
+            </div>
+          </transition>
 
-          <message></message>
-        </div>
-        <transition name="el-fade-in">
-          <div
-              v-if="newMsgCount > 0"
-              class="new-msg-tip"
-              @click="goToBottom"
-          >
-            <i class="el-icon-arrow-down"></i>
-            <span>{{ newMsgCount }} 条新消息</span>
+          <div class="input-area-wrapper">
+            <usertext></usertext>
           </div>
-        </transition>
-
-        <div class="input-area-wrapper">
-          <usertext></usertext>
         </div>
-      </div>
 
         <div v-else class="welcome-box">
           <div class="bg-circle circle-1"></div>
@@ -74,8 +74,8 @@
           </div>
         </div>
 
+      </div>
     </div>
-  </div>
   </div>
 </template>
 
@@ -301,15 +301,16 @@ export default {
     },
     scrollToBottom() {
       this.$nextTick(() => {
-        const msgBox = document.getElementById('chat-messages');
-        if (msgBox) {
-          setTimeout(() => {
+        // requestAnimationFrame 确保浏览器已经准备好下一次重绘
+        requestAnimationFrame(() => {
+          const msgBox = document.getElementById('chat-messages');
+          if (msgBox) {
             msgBox.scrollTo({
               top: msgBox.scrollHeight,
               behavior: 'auto'
             });
-          }, 50);
-        }
+          }
+        });
       });
     }
   },
@@ -354,7 +355,7 @@ export default {
   right: 20px;
   /* 这里的 bottom 是相对于 main-container 底部的距离 */
   /* 因为 input-area-wrapper 占了 30% 高度，所以设为 32% 左右正好在输入框上方 */
-  bottom: 32%;
+  bottom: 30%;
   z-index: 999; /* 确保在消息内容之上 */
   background-color: #409EFF;
   color: #fff;

@@ -66,20 +66,22 @@ export default {
 
       // 2. 排序
       return list.slice().sort((a, b) => {
-        // 如果是普通用户，优先展示服务域 (isReceptionist 为 true)
+        // 【第一优先级】：按照最新消息时间排序
+        let timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
+        let timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
+
+        // 只要有一方有时间（代表发过消息），就绝对按时间降序排
+        if (timeA > 0 || timeB > 0) {
+          return timeB - timeA;
+        }
+
+        // 【第二优先级】：如果都没有时间（都没聊过天），再把服务中心置顶
         if (this.currentUser.userTypeId !== 1) {
           if (a.isReceptionist && !b.isReceptionist) return -1;
           if (!a.isReceptionist && b.isReceptionist) return 1;
         }
 
-        let timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
-        let timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
-
-        if (timeA > 0 || timeB > 0) {
-          return timeB - timeA; // 降序：时间越晚越靠前
-        }
-
-        // 规则C: 在线的排在前面
+        // 【第三优先级】：如果都没时间，也都是同类，在线的排在前面
         return b.userStateId - a.userStateId;
       });
     },

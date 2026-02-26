@@ -53,53 +53,44 @@ const store = new Vuex.Store({
       if (user) Vue.set(user, 'userStateId', userStateId);
       if (state.currentSession && state.currentSession.id === userId) Vue.set(state.currentSession, 'userStateId', userStateId);
     },
-    INIT_ACTIVE_SESSIONS(state, sessionsMap) {
+    INIT_ACTIVE_SESSIONS(state, activeSessionsList) {
       let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
-      if (!sessionsMap || !state.users.length) return;
 
-      // sessionsMap 结构: { "userId": "convId" } (后端 Redis 返回)
+      // 1. 数据校验：确保后端返回了数组，且本地用户列表已经初始化
+      if (!Array.isArray(activeSessionsList) || activeSessionsList.length === 0 || !state.users.length) return;
+
       state.users.forEach(user => {
-        let convId = null;
-        let targetId = null;
-        // 根据身份匹配 Key
+        let activeData = null;
+
+        // 2. --- 核心匹配逻辑 (彻底取代以前恶心的 Map Key 匹配) ---
         if (currentUser.userTypeId === 1) {
-          // 客服端：Key 是用户 ID
-          convId = sessionsMap[user.id.toString()];
+          // 我是客服：去数组里找，哪个 VO 的 userId 和我列表里的普通用户 id 一致
+          activeData = activeSessionsList.find(s => s.userId == user.id);
         } else {
-          // 1. 优先尝试匹配 username (如 "service_1")
-          if (sessionsMap[user.username]) {
-            convId = sessionsMap[user.username];
-          }
-              // 场景 2: Key 是纯数字 ID (您的真实情况：{1: "uuid"})
-          // 这里的 Key "1" 既匹配了 serviceDomainId，又是对方的 ID
-          else if (user.serviceDomainId && sessionsMap[user.serviceDomainId.toString()]) {
-
-            // 1. 拿到会话ID
-            convId = sessionsMap[user.serviceDomainId.toString()];
-
-            // 2. 【核心修复】直接拿到对方ID！
-            // 既然 Key 就是对方 ID，而我们是用 serviceDomainId 匹配上的
-            // 说明此时 对方ID = serviceDomainId
-            targetId = user.serviceDomainId;
-          }
+          // 我是普通用户：去数组里找，哪个 VO 的 domainId 和我列表里的虚拟服务号的 domainId 一致
+          activeData = activeSessionsList.find(s => s.domainId == user.serviceDomainId);
         }
 
-        // 直接修改 User 对象属性
-        // 统一赋值
-        if (convId) {
-          Vue.set(user, 'conversationId', convId);
+        // 3. --- 统一赋值逻辑 ---
+        if (activeData) {
+          // 匹配到了活跃会话，写入 conversationId
+          Vue.set(user, 'conversationId', activeData.conversationId);
 
-          // 如果拿到了对方 ID，直接赋值，解决 null 的问题
-          if (targetId) {
-            Vue.set(user, 'id', targetId);
-            console.log(`[Init] 自动恢复会话对象: ${user.nickname}, ID: ${targetId}`);
+          // 💥 关键修复：如果是普通用户端，必须把 VO 里的真实客服 ID 赋给当前的虚拟号对象
+          if (currentUser.userTypeId !== 1 && activeData.userId) {
+            Vue.set(user, 'id', activeData.userId);
+            console.log(`[Init] 匹配到活跃会话: ${user.nickname}, 客服真实ID: ${activeData.userId}`);
 
-            // 如果当前正好选中了这个会话，同步更新 currentSession.id
+            // 如果用户当前正好停留在该窗口，需要同步激活 currentSession
             if (state.currentSession && state.currentSession.username === user.username) {
-              Vue.set(state.currentSession, 'id', targetId);
+              Vue.set(state.currentSession, 'id', activeData.userId);
+              Vue.set(state.currentSession, 'conversationId', activeData.conversationId);
+              // 彻底解除纯接待状态，点亮聊天窗口！
+              Vue.set(state.currentSession, 'isReceptionist', false);
             }
           }
         } else {
+          // 没有匹配到活跃会话，清理干净防止串场
           Vue.set(user, 'conversationId', null);
         }
       });
@@ -246,9 +237,9 @@ const store = new Vuex.Store({
           // 1. 切换会话
           store.commit('changeCurrentSession', targetUser);
 
-          // 2. 强制刷新历史记录 (防止假死)
+          /*// 2. 强制刷新历史记录 (防止假死)
           // 必须通过 store.dispatch 调用，因为这里是 mutation 内部
-          store.dispatch('loadPrivateHistory', { toUser: targetUser, page: 1 });
+          store.dispatch('loadPrivateHistory', { toUser: targetUser, page: 1 });*/
 
         } else {
           console.warn("无法找到跳转目标，Message:", msg);
@@ -556,7 +547,7 @@ const store = new Vuex.Store({
                 username: username,
                 nickname: d.name + '中心',
                 userProfile: customerServiceAvatar,
-                userTypeId: 0,
+                userTypeId: 1,
                 isReceptionist: true,
                 userStateId: 1,
                 // 如果旧对象里有这些 ID，就继承过来，否则设为 null
@@ -646,9 +637,9 @@ const store = new Vuex.Store({
     },
 
     async loadPrivateHistory({ commit, state }, { toUser, page = 1, size = 20 }) {
-      if (page === 1) {
+      /*if (page === 1) {
         state.sessions = {};
-      }
+      }*/
       let currentUser = JSON.parse(window.sessionStorage.getItem("user") || '{}');
       if (!toUser) return 0;
 

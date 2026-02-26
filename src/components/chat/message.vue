@@ -527,7 +527,20 @@ export default {
         // 绝对不去查什么 realInfo
         return this.serviceAvatar;
       } else {
-        return entry.fromProfile || this.currentSession.userProfile || this.defaultAvatar;
+        // 1. 如果消息本身带了真实头像，优先使用（绝对准确）
+        if (entry.fromProfile) {
+          return entry.fromProfile;
+        }
+
+        // 2. 如果没带头像，判断这条消息是不是【当前对话用户】本人发的
+        // 核对昵称：如果是用户发的，借用用户的本地头像
+        if (entry.fromNickname && entry.fromNickname === this.currentSession.nickname) {
+          return this.currentSession.userProfile || this.defaultAvatar;
+        }
+
+        // 3. 如果名字对不上（说明是转接前，其他没头像的支撑人员发的记录）
+        // 绝对不能借用用户的头像，直接给默认灰色头像！
+        return this.defaultAvatar;
       }
     },
 
