@@ -5,9 +5,9 @@
 基于 **Vue 2.x** + **Element UI** 构建，实现了用户/管理员登录、即时通讯（私聊/群聊）、消息通知、后台管理等功能。
 通讯协议采用 **WebSocket** (SockJS + STOMP) 实现低延迟交互。
 
-**前端源码：**[https://gitee.com/janos1028/service-chat_vue](https://github.com/Janos1028/serviceChat-vue-master)
+**前端源码：**https://github.com/Janos1028/serviceChat-vue-master
 
-**后端源码：**[https://gitee.com/janos1028/service-chat_back](https://github.com/Janos1028/serviceChat-back-master)
+**后端源码：**https://github.com/Janos1028/serviceChat-back-master
 
 ## ✨ 核心功能特性
 
